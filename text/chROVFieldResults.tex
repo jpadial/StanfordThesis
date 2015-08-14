@@ -1,0 +1,1310 @@
+% !TEX root = ../thesis.tex
+
+\chapter{ROV Field Results}
+\label{ch.ROV}
+
+In collaboration with the Monterey Bay Aquarium Research Institute (MBARI), imaging sonar data were collected from remotely-operated vehicles (ROVs) in order to test the localization methods presented in this thesis.
+
+\section{Experimental System}
+\label{rov.Experimental}
+
+Figure \ref{fig:DocRicketts} shows the MBARI ROV Doc Ricketts, which is one of two MBARI ROVs used for field data collection in this thesis.
+MBARI ROVs are equipped with a full instrumentation system for vehicle state estimation, observation (sonars, cameras), and environmental sampling (manipulator arms).
+The following list presents onboard sensors that are relevant for this work:
+
+\begin{itemize}
+\item Kongsberg Mesotech 1071 330kHz mechanically-scanned imaging sonar (circled red on vehicle top in Figure \ref{fig:DocRicketts})
+\item RDI – Workhorse Navigator DVL (1200 Khz)
+\item Octans 6000m FOG (primary heading reference)
+\item Tritech FOG (secondary heading reference)
+\item Paroscientific depth sensor
+\item Kongsberg Mesotech Echo Sounder 807 (altimeter)
+\item Sonardyne Ranger 2720 USBL
+\end{itemize}
+
+\begin{figure}[!h]
+	\centering
+		\includegraphics[width=0.5\textwidth]{DocRicketts}
+	\caption{MBARI DocRicketts ROV with a Kongsberg mechanically-scanned imaging sonar circled in red.  Image courtesy of mbari.org.}
+	\label{fig:DocRicketts}
+\end{figure}
+
+\subsection{Sonar Image Field Data}
+\label{rov.Experimental.Sonar}
+
+Each field data set comprises a sonar image and vehicle state measurements:
+
+\begin{itemize}
+\item \textbf{Sonar Image}: A polar sonar image collected by a mechanically-scanned imaging sonar.  Figure \ref{fig:rovSonarImage} provides an example polar sonar image, annotated to indicate that up in the image corresponds to a transducer azimuth aligned with vehicle forward.
+\item \textbf{Heading Estimate}: The vehicle heading estimate from the FOG (Octans or Tritech). Vehicle pitch and roll are also estimated by the FOG, though these orientation states are maintained near zero by the on-board control system.
+\item \textbf{Altitude Estimate}: The vehicle altitude above the seafloor terrain as provided by either the Mesotech altimeter or by using the four ranges of the DVL.
+\item \textbf{Depth Estimate}: Vehicle depth estimate from the Paroscientific sensor.
+\item \textbf{GPS-Relative Position Estimate}: The vehicle GPS-relative position estimate is provided by the USBL.  As discussed previously, the accuracy of this estimate is, in general, inversely related to ROV depth, and inherently does not provide a map-relative position estimate.
+\end{itemize}
+
+\begin{figure}[!h]
+	\centering
+		\includegraphics[width=0.4\textwidth]{annotatedSonarImage}
+	\caption{Annotated polar sonar image from a mechanically-scanned imaging sonar. The vehicle forward is up in the sonar image.  The sonar transducer is rotated in azimuth (az) to form the image, where radial distance from the image center is the range (ra) of the intensity return.  }
+	\label{fig:rovSonarImage}
+\end{figure}
+
+To minimize motion blur and warping in the sonar image, an on-board control system maintained a steady 3D position with respect to the seafloor during sonar image formation.
+As described in Section \ref{sonar.Types.Mechanically}, time is required for the mechanically-scanned sonar image formation as the sonar transducer is physically rotated in azimuth.
+The on-board station-keeping controller uses DVL, Octans and altimeter measurements for closed-loop ROV position control. 
+The right plot of Figure \ref{fig:kft} demonstrates ROV station-keeping controller performance in maintaining a constant horizontal position, where the horizontal position is maintained to within roughly $0.1m$ of the commanded position.
+
+\begin{figure} [!h]
+	\centering
+	\begin{subfigure}[b]{0.495\textwidth}
+                \includegraphics[width=\textwidth]{kftROV12082014_Offset}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.495\textwidth}
+                \includegraphics[width=\textwidth]{kftROV12082014}
+		\caption{}
+  	\end{subfigure}
+	\caption{Position offsets between sonar imaging sites and station-keeping perfomance. (a) ROV horizontal position track between two sonar imaging sites (offset of $50m$ Northings, $50m$ Westings), measured by the Kearfott SEADeViL KN-6053. (b) Zoomed-in ROV horizontal position track at ``Image Site 1'', demonstrating station-keeping performance of the ROV onboard control system. }
+	\label{fig:kft}
+\end{figure}
+
+\subsection{Position Offset Truth Data}
+\label{rov.Experimental.Position}
+
+Additionally, for the data sets collected to test localization performance in this work, the ROVs were outfitted with a highly-accurate INS: 
+
+\begin{itemize}
+\item Kearfott SEADeViL KN-6053 DVL/INS
+\end{itemize}
+
+The Kearfott INS provides a position accuracy (drift rate) of less than $0.05 \%$ DT (distance traveled), and was used for offset truth data between sonar image vehicle positions.
+The lack of truth data is a common issue with underwater robotic research.
+Particularly for map-relative localization, there are generally no ``truth'' data available.
+GPS-relative ROV position is estimable by USBL.
+However, as discussed in Section \ref{intro.Existing.Acoustic.USBL}, even the most accurate USBL cannot provide a map-relative position estimate due to map geo-referencing errors.
+Indeed, this inability of USBL to provide a map-relative position estimate is a chief motivation for this thesis.
+As such, in lieu of ``truth'' data for individual sonar image vehicle locations, the high-accuracy INS offset estimate is used as a surrogate for truth data.
+That is, the INS provides truth data for the positional \emph{offest} between two sonar imaging sites, as shown in the left image of Figure \ref{fig:kft}.
+
+\section{Field Data Sites}
+\label{rov.Field}
+
+Field data were collected at three principal sites in the Monterey Bay, CA, USA.
+The sites have diverse topographical characterstics, and as such afforded a diverse data set for evaluation of the localization capability presented in this thesis.
+Figure \ref{fig:rovSitesDEMs} shows 1m digital elevation maps (DEMs) of the three sites, built from AUV mapping data by Dave Caress at MBARI using MB-System software \cite{Caress2006}.
+An overview of the three sites is provided below:
+
+\begin{itemize}
+\item \textbf{Portuguese Ledge (PL)}: Topographical outcropping in the midst of a flat plain. Portuguese Ledge is a shallow depth area (~90m seafloor depth).
+\item \textbf{2850 Site}: Large deep water site (~2850m) with varied topographical characteristics.  Some areas have mainly flat topography, but marked by distinct features such as a large boulder, ledges, and a clam field of scientific interest. Other areas are marked by more varied topography.
+\item \textbf{1800 Site}: Site with ripple fields and interesting topographical features at seafloor depth of roughly 1800m. Many of the topographical features have sub-meter variation.
+\end{itemize}
+
+\begin{figure} [H]
+	\centering
+	\begin{subfigure}[b]{0.43\textwidth}
+                \includegraphics[width=\textwidth]{Map_12062014_016_200mOffsets}
+                \caption{}
+	\end{subfigure}
+	\hspace{8ex}
+  	\centering
+	\begin{subfigure}[b]{0.43\textwidth}
+                \includegraphics[width=\textwidth]{Map_562_13_200mOffsets}
+		\caption{}
+  	\end{subfigure}
+  	
+  	\centering
+	\begin{subfigure}[b]{0.43\textwidth}
+                \includegraphics[width=\textwidth]{Map_561_3_200mOffsets}
+		\caption{}
+  	\end{subfigure}
+  	\hspace{8ex}
+  	\centering
+	\begin{subfigure}[b]{0.43\textwidth}
+                \includegraphics[width=\textwidth]{Map_12062014_040_300mOffsets}
+		\caption{}
+  	\end{subfigure}
+  	
+  	\centering
+	\begin{subfigure}[b]{0.8\textwidth}
+                \includegraphics[width=\textwidth]{Map_559_5_500m_x_300m_Offsets}
+		\caption{}
+  	\end{subfigure}
+  	
+	\caption{Monterey Bay 1m DEMs for the data collection sites identified in Figure \ref{fig:ROVGoogle}. (a)-(c) 2800 site maps. (d) 1850 site map. (e) PL site map. }
+	\label{fig:rovSitesDEMs}
+\end{figure}
+
+The locations of the three sites in the Monterey Bay is shown in GoogleMaps imagery in Figure \ref{fig:ROVGoogle}.
+Data were collected over the course of four distinct ship missions.
+In total, results from sixteen sonar image data sets are presented.
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=0.8\textwidth]{ROVFieldDataGoogleMaps}
+	\caption{Field data collection sites in the Monterey Bay, CA, USA.  Image from Google Maps. Three principal sites are identified: (1) 2850 Site (roughly 2850m seafloor depth), (2) 1800 Site (roughly 1800m seafloor depth), and (3) Portuguese Ledge (roughly 90m seafloor depth).}
+	\label{fig:ROVGoogle}
+\end{figure}
+
+\subsection{Training verus Testing Images}
+\label{rov.Field.Training}
+
+The number of training and test image sets collected at each site is identified in Figure \ref{fig:ROVGoogle}.
+Training images are the images used for parameter fitting of the Differential Height (DH) model, where the model form is as described in Section \ref{visibility.Visibility.DH}, and the parameter fitting method is as described in Section \ref{visibility.Tuning.DHExpFit}.
+Testing images are the images used for testing algorithm performance using position offset truth data, as described in Section \ref{rov.Experimental.Position}.
+
+The total training set of three sonar image sets was chosen according to a lack of position offset truth data for these runs.
+While including more of the testing data set as training data may provide a more robust parameter set estimate for the DH model, it would take away from evaluation of the algorithm performance as compared to position offset truth data.
+The details of the parameter training and testing results are presented in the following sections.
+
+\section{Model Parameter Fitting from Field Data}
+\label{rov.dhFit}
+
+A strength of the Differential Height (DH) visibility probability model is its simplicity, which makes it both computationally tractable and tunable to experimental field data.
+For the case of underwater localization using imaging sonar, given ``true" vehicle locations with respect to underwater terrain maps, the free parameters of the DH model can be fit to measured visibility probabilities, which means fitting the parameters of the sigmoid function given by (\ref{eq:sigmoid}) that translates differential heights into visibility probabilities.
+
+As introduced in the previous section, three ROV sonar image datasets were selected as parameter training datasets.  This dataset will be referred to as the ``training'' set:
+
+\begin{itemize}
+\item \textbf{Training Set 1: 2850-T1 } Imaging of a large boulder in a crater surrounded by flat terrain at the 2850 site. 
+\item \textbf{Training Set 2: PL-T2} Imaging of topographical features at shallower depth (86m) at the Portuguese Ledge site.
+\item \textbf{Training Set 3: 2850-T3} Imaging of ripple topography at the 2850 site.
+\end{itemize}
+
+\subsection{Pseudo-Truth Positions through Estimation}
+\label{rov.dhFit.Pseudo}
+
+Unfortunately, there was no truth data for these underwater datasets, and subsequently obtaining maximum likelihood estimate (MLE) ROV positions using the estimator framework described in Chapter \ref{ch.Framework} was necessary for the DH model parameter fitting; that is, the MLE positions served as assumed ``truth'' positions. Using Equations \ref{eq:dh}, \ref{eq:sigmoid} for terrain visibility probabilities, the MLE vehicle seafloor-relative position was obtained for each of the three sonar imagery datasets.  Initial values of the sigmoid parameters were iterated until stable MLE positions were found, i.e. the process began with hand-tuned parameters.  The differential height values of ensonified terrain about these three MLE positions, along with measured visibility probabilities from the three sonar images, were then used as input to an optimization for sigmoid model parameter estimation.  Hence, the parameter identification and MLE estimation were not uncorrelated. There is some circularity in the parameter identification.  
+
+\begin{figure}[H]
+	\centering
+		\includegraphics[width=0.7\textwidth]{bootstrap}
+	\caption{Bootstrapping Method for DH model parameter fit. }
+	\label{fig:bootstrap}
+\end{figure}
+
+\subsection{Parameter Fit}
+\label{rov.dhFit.Parameter}
+
+The 3-parameter DH model sigmoid parameter values obtained through the optimization of Equation \ref{eq:opt3} are $(\lambda^*, \mu^*, \gamma^*) = (0.427, -0.153m, 0.262m)$, where $\kappa = 0.5$ was set a priori. As the training data is limited, these parameter values were rounded to one significant digit in order to limit overfitting effects on the test data performance. Furthermore, using model parameters with precision of two or more significant digits intimates an inappropriately high certainty in those parameter values. 
+
+The DH model values used to test localization performance are (rounded to one significant digit):
+
+\large
+\begin{equation} 
+\kappa, \lambda^*, \mu^*, \gamma^* = (0.5, 0.4, -0.2m, 0.3m)
+\label{eq:fitParams}
+\end{equation}
+\normalsize
+\\
+The choices of the constants necessary for DH model parameter optimization were:
+
+\begin{itemize}
+\item \textbf{($\delta_{\text{min}} = -5m$, $\delta_{\text{max}} = 3m$)}: Minimum and maximum differential height values, respectively, considered in the parameter optimization.
+\item \textbf{$N = 100$}: Total number of differential height bins between $\delta_{\text{min}}$ and $\delta_{\text{max}}$.
+\item \textbf{$Q_{\text{max}} = 200$}: Number of differential height observations in the training data for a given differential height bin such that the bin is maximally weighted according to Equation \ref{eq:beta}. 
+\end{itemize} 
+
+Figure \ref{fig:optResult} presents the results of the optimization model fit, along with the associated DH bin weights.  
+The red line in Figure \ref{fig:optResult} indicates the measured visbility probabilites, while the blue line shows the modeled probability for the fit parameters.  The green line shows the weights $\beta$.  Note that the modeled probability fit does extremely well through the transition region from low confidence to high confidence, and acts as essentially a low pass filter on the low confidence measured probabilities (for negative DH values).   At higher DH values, the measured probabilities become erratic, though the effect of these data on the parameter estimation is de-weighted because there were few pixels observed for these DH values. 
+
+\begin{figure}[!h]
+	\centering
+		\includegraphics[width=0.7\textwidth]{sigEstimation2}
+	\caption{Results of the DH model sigmoid parameter fit.  The horizontal axis is differential height [m]. (Red) Measured visibility probabilities. (Blue) Modeled visibility probabilities. (Green) Optimization weights $\beta$. }
+	\label{fig:optResult}
+\end{figure}
+
+%An open question in this work to date is how well these parameters for the DH model visibility probabilites will fit measured visibility probabilities for other terrains.  The goal of this model development is that by incorporating enough varied terrain into the parameter optimization, a robust set of parameters can be found.  However, more field data must be collected in order to prove this out.
+
+\section{Field Results Summary}
+\label{rov.Summary}
+
+Using the DH model parameters in (\ref{eq:fitParams}), map-relative ROV position was estimated for the 16 sonar image data sets.
+Table \ref{tab:nonparametricStats} presents the following estimator statistics for the data sets:
+
+\begin{itemize}
+\item $\text{E}_\textrm{MLE}$, $\text{N}_\textrm{MLE}$: maximum likelihood estimate position in Eastings and Northings, respectively, with respect to the USBL estimate.
+\item $H$: estimator entropy in nats, as defined in (\ref{eq:entropy}). Higher entropy corresponds to higher uncertainty in the estimated position distribution.
+\item $\alpha_5, \alpha_3$: estimator probability mass within 5 meters and 3 meters, respectively, of the MLE, as defined in (\ref{eq:alpha}).
+\end{itemize}
+
+\begin{center}
+	\begin{tabular}{|c|r|r|r|r|r|}
+		\hline
+		Set & $\text{E}_\textrm{MLE}$ [m] & $\text{N}_\textrm{MLE}$ [m] & H [nats] & $\alpha_5$ & $\alpha_3$ \\ \hline
+		2850-T1 & 4 & 35 & 0.00 & 1.00 & 1.00 \\ \hline
+		PL-3 & -1 & 7 & 0.02 & 1.00 & 0.99   \\ \hline
+		PL-T2 & 25 & -16 & 0.04 & 0.99 & 0.89 \\ \hline
+		2850-T3 & 12 & 26 & 0.17 & 0.79 & 0.71 \\ \hline
+		2850-2 & 2 & 22 & 0.35 & 0.89 & 086 \\ \hline
+		1800-3 & 16 & 94 & 0.45 & 0.98 & 0.86 \\ \hline
+		1800-2 & 13 & 93 &  0.54 & 0.95 & 0.80 \\ \hline
+		1800-1 & 10 & 92 & 0.64 & 0.90 & 0.70 \\ \hline
+		2850-3 & 24 & 28 & 0.69 & 0.99 & 0.94 \\ \hline
+		2850-1 & 5 & 7 & 0.70 & 0.76 & 0.75 \\ \hline
+		PL-2 & 0 & 7 & 0.89 & 0.90 & 0.84 \\ \hline
+		2850-4 & 12 & 29 & 1.87 & 0.66 & 0.45 \\ \hline \hline
+		2850-5 & -19 & 54 & 2.86 & 0.29 & 0.15 \\ \hline
+		2850-6 & -28 & 33 & 3.22 & 0.16 & 0.08 \\ \hline
+		PL-1 & -6 & 4 & 4.32 & 0.14 & 0.10 \\ \hline
+		PL-4 & -40 & -25 & 5.92 & 0.03 & 0.01 \\ \hline
+	\end{tabular}
+	
+	\captionof{table}{Maximum likelihood estimator statistics using the DH visibility probability model. Non-parametric distribution statistics are provided as described in Section \ref{framework.Statistics}. \emph{Column 1} Dataset label. The prefix indexes one of the three data sites, and the suffix indicates the particular set. Suffixes with a ``T'' indicate a training set for the DH model parameter estimation as described in Section \ref{rov.dhFit}. \emph{Columns 2 and 3} MLE position in Eastings and Northings, respectively, relative to the USBL estimate. \emph{Column 4} Estimator distribution entropy, in nats, as described in Section \ref{framework.Statistics.Entropy}.  \emph{Columns 5 and 6} Distribution probability mass within $5m$ and $3m$ of the MLE, respectively. }
+	\label{tab:nonparametricStats} 
+\end{center}
+
+The data sets in Table \ref{tab:nonparametricStats} are arranged from top to bottom in ascending entropy.
+As entropy is a metric to gauge estimator uncertainty, the ordering of the table from top to bottom is loosely an ordering from lowest to greatest estimate uncertainty. 
+Important aspects of the data presented in Table \ref{tab:nonparametricStats} are:
+
+\begin{itemize}
+\item \textbf{Varied MLE Offsets from USBL}: There are varied offsets in Eastings and Northings of the MLE position from the USBL estimate. 
+\begin{itemize}
+\item For datasets PL-1, PL-2, and PL-3, the offsets are less than 10m.  These small offsets are due to two factors stemming from the shallow depth at the Portuguese Ledge site: (1) the topography map was better geo-referenced from alignment of the AUV-created 1m-resolution DEM with sonar soundings from a surface vessel, where the lesser depth allowed relatively accurate ship-based soundings, and (2) the USBL can achieve greater accuracy at lesser depth.
+\item Many of the datasets show MLE offsets in the 20-40m range.  These offsets can be attributed to some (unknown) combination of USBL and geo-referencing errors.
+\item The 1800 site datasets (1800-1, 1800-2, 1800-3) show MLE offsets of ~95m in Northings.  The main component of this large offset is almost surely geo-referencing error.  As this map was made from an AUV at roughly 1800m depth, this is a plausible geo-referencing error.
+\end{itemize}
+\item \textbf{Training Set Uncertainty is Low}: Estimator uncertainty is on the lower end of the dataset, as shown in the $H$, $\alpha_5$, and $\alpha_3$ values for 2850-T1, PL-T2, and 2850-T3. Lower estimator uncertainty in the training set is good in that there is higher confidence in the MLE positions used to train the parameters of the visibility model.  However, lower estimator uncertainty in the training set as compared to the testing data set introduces the risk that the training data does not accurately capture true measurement model uncertainty.
+\item \textbf{Significantly Higher Uncertainty for the Last Four Sets}: The last four datasets in the table (2850-5, 2850-6, PL-1, PL-4) show considerably higher entropy and lower $\alpha$ values as compared to the other datasets.  As will be discussed further in Section \ref{rov.Truth}, estimation on sets 2850-5 and 2850-6 suffer from MLE false convergence, i.e. the MLE is incorrect.  The offset truth data indicates, conversely, that the estimation on set PL-1 indeed converges on an accurate MLE.  However, the distribution is spread, resulting in low confidence.  Finally, the estimation on PL-4 correctly identifies that there should be little confidence in the MLE, as this image was taken in a flat area with no shadow information from terrain features, as detailed in Section \ref{rov.Summary.Null}.
+\end{itemize}
+
+The estimation results for the training sets 2850-T1, 2850-T3, PL-2 are further explored in Figures \ref{fig:trainingPlots} and \ref{fig:trainingDistributions}.
+For each dataset, Figure \ref{fig:trainingPlots} presents the original sonar intensity image, actual measurement (visibility image) as defined in Section \ref{framework.Measurement.Measured}, MLE expected measurement (visibility probability image) as defined in Section \ref{framework.Measurement.Expected}, and an alignment image, described below.
+
+\subsection{Alignment Image}
+\label{rov.Summary.Alignment}
+
+For each dataset an alignment image, $\mathbf{a}$, is shown in the fourth column of Figure \ref{fig:trainingPlots}.  
+The alignment image provides a qualitative measure of the agreement between the actual and MLE expected measurements, and is formed through the comparison of the actual measurement, $\mathbf{y}$, to a binarized MLE expected measurement image, $\tilde{\mathbf{b}}$.
+The binarized image is calculated from the MLE expected measurement image, $\tilde{\mathbf{y}}$ by hard assignment to $0$ or $1$ according to:
+
+\begin{align}
+\begin{split}
+\tilde{\mathbf{b}}[u] &\equiv \left\{ 
+  \begin{array}{l l}
+    0 & \quad \tilde{\mathbf{y}}[u] < \frac{1}{2} \hspace{1ex} \text{\textbf{expected} shadow}\\
+    1 & \quad \text{otherwise}
+  \end{array} \right.
+\end{split}
+ \label{eq:binCalc}
+\end{align}
+
+\noindent Binarization discards much of what makes the DH visibility probability model valuable, but allows for generation of an alignment plot that provides a succinct qualitative measure of alignment between the actual and MLE expected measurements.
+The calculation of $\mathbf{a}$ is accomplished by:
+
+\begin{align}
+\begin{split}
+\mathbf{a}[u] &\equiv \left\{ 
+  \begin{array}{l l}
+    -1 & \quad \mathbf{y}[u] \oplus \tilde{\mathbf{b}}[u] = 1 \hspace{8ex} \text{disagreement (blue in plot)}\\
+    \hspace{1ex}0 & \quad \mathbf{y}[u] = 0 \wedge \tilde{\mathbf{b}}[u] = 0 \hspace{4ex} \text{shadow agreement (green in plot)} \\
+    \hspace{1ex}1 & \quad \mathbf{y}[u] = 1 \wedge \tilde{\mathbf{b}}[u] = 1 \hspace{4ex} \text{visible agreement (red in plot)}
+  \end{array} \right.
+\end{split}
+ \label{eq:alignmentCalc}
+\end{align}
+
+\noindent For each pixel in the alignment plot, the color indicates the following:
+
+\begin{itemize}
+\item \textbf{Blue}: There is disagreement between actual and MLE expected measurements.
+\item \textbf{Green}: There is shadow agreement.
+\item \textbf{Red}: There is visibile agreement.
+\end{itemize}
+
+\subsection{Training Set Results}
+\label{rov.Summary.Training}
+
+For the DH model training datasets 2850-T1, 2850-T3, and PL-T2, the plots shown in Figure \ref{fig:trainingPlots} demonstrate strong agreement between the actual and MLE expected measurements. 
+As seen in the alignment plots for each dataset, there is strong shadow and visible agreement for each set, especially clear in the green agreement between the dominant shadow regions.
+There is some blue disagreement, of course, as the sonar image measurements are noisy.
+
+\begin{figure} [h!]
+	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{meas_561_3_c}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{measBinary_561_3_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_561_3_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_561_3_c}
+		\caption{}
+  	\end{subfigure}
+  	
+  	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{meas_562_5_c}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{measBinary_562_5_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_562_5_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_562_5_c}
+		\caption{}
+  	\end{subfigure}
+  	
+  	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{meas_559_5_c}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{measBinary_559_5_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_559_5_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_559_5_c}
+		\caption{}
+  	\end{subfigure}
+  	
+  	\caption{Actual and MLE expected plots for DH model training datasets 2850-T1, 2850-T3, PL-T2, from top to bottom \emph{Column 1} Sonar images, shown in \emph{display} form \emph{Column 2} Actual measurements. Black pixels are shadow, white pixels are visible. \emph{Column 3} Expected measurements for the MLE. Red indicates a higher visibility probability. \emph{Column 4} MLE Alignment plots as defined in Section \ref{rov.Summary.Alignment}}
+	\label{fig:trainingPlots}
+\end{figure}
+ 
+The posterior distributions for each of the training set estimation results is presented in Figure \ref{fig:trainingDistributions}.
+The coarse-resolution and fine-resolution distributions, as discussed in Section \ref{framework.Motionless}, are presented for each set in both 2-D and 3-D views.
+Note the strong uni-modal peaks for sets 2850-T1 and PL-T2.
+While the fine-resolution distribution surface is bi-modal for 2850-T3, the MLE peak is dominant.
+The strong convergences on the MLE for each of the training sets underscores the high level of certainty for these datasets, as quantified by the values in Table \ref{tab:nonparametricStats}.
+
+ \begin{figure} [h!]	
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_pcolor_561_3}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_surf_561_3}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_pcolor_561_3}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_surf_561_3}
+		\caption{}
+  	\end{subfigure}
+  		  	
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_pcolor_562_5}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_surf_562_5}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_pcolor_562_5}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_surf_562_5}
+		\caption{}
+  	\end{subfigure}
+  	
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_pcolor_559_5}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_surf_559_5}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_pcolor_559_5}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_surf_559_5}
+		\caption{}
+  	\end{subfigure}
+  	
+	\caption{Training data posterior probability distributions for datasets 2850-T1, 2850-T3, PL-T2, from top to bottom. \emph{Column 1} Coarse-resolution distribution surface 2-D view. \emph{Column 2} Coarse-resolution 3-D view. \emph{Column 3} Fine-resolution 2-D view. \emph{Column 4} Fine-resolution 3-D view. }
+	\label{fig:trainingDistributions}
+\end{figure}
+
+\subsection{Null Set Result}
+\label{rov.Summary.Null}
+
+As presented in Table \ref{tab:nonparametricStats}, the estimator result for dataset PL-4
+is characterized by little confidence in the MLE, as evidenced by the high entropy (highest) and low values of $\alpha_3$ and $\alpha_5$.
+The low confidence was expected, as this image was taken in a flat area with little to no shadow information from true terrain features.
+As such, it may be termed a ``null'' set, as its role was similar to that of a control group in an experiment.
+The estimator performed as expected, having little to no confidence in any estimate over another.
+This is evidenced by the coarse-resolution posterior distribution peak for PL-4 being roughly two orders of magnitude smaller than that of any of the three training set posterior distributions from Figure \ref{fig:trainingDistributions}.
+
+\begin{figure} [h!]
+	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{meas_1024_2014_001_c}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{measBinary_1024_2014_001_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_1024_2014_001_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_1024_2014_001_c}
+		\caption{}
+  	\end{subfigure}
+
+\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{PMF_pcolor_1024_2014_001}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{PMF_surf_1024_2014_001}
+		\caption{}
+  	\end{subfigure}
+  	
+	\caption{Actual and MLE expected plots for ``null'' set PL-4, along with posterior distribution plots. The first row presents the sonar image, actual measurement, MLE expected measurement, and alignment plot for PL-4, as was done for the training sets in Figure \ref{fig:trainingPlots}. The bottom row presents posterior distribution plots for PL-4 as was done for the training sets in Figure \ref{fig:trainingDistributions} (note that there are no fine-resolution plots as no cells were refined in the coarse-resolution set).}
+	\label{fig:nullSetPlots}
+\end{figure}
+
+\section{Performance with Truth Offsets}
+\label{rov.Truth}
+
+Truth data for position offsets between sonar image datasets, as described in Section \ref{rov.Experimental.Position}, provides a means of evaluating localization performance.
+Table \ref{tab:offsets} provides truth and estimated offset data for 8 offset sets, where the estimated offsets are between map-relative MLE positions.
+The offsets are ordered from top to bottom in ascending error norm.
+
+\begin{center}
+	\begin{tabular}{|c|c|r|r|r|r|r|r|r|}
+		\hline
+		Site 1 & Site 2 & $\Delta \text{E}_\textrm{TRU}$ & $\Delta \text{N}_\textrm{TRU}$ & $\Delta \text{E}_\textrm{EST}$ & $\Delta \text{N}_\textrm{EST}$ & $\Delta \text{E}_\textrm{ERR} $ & $\Delta \text{N}_\textrm{ERR}$ & $||\text{Err}||$ \\ \hline
+		1800-1 & 1800-2 & -50.0 & 50.0 & -49.9 & 50.4 & 0.1 & 0.4 & 0.4 \\ \hline
+		PL-2 & PL-3 & 111.2 & 0.8 & 112.0 & 1.5 & 0.8 & 0.6 & 1.0 \\ \hline
+		2850-1 & 2850-2 & -40.0 & 2.0 & -38.8 & 1.7 & 1.2 & -0.3 & 1.2 \\ \hline
+		PL-1 & PL-2 & 333.5 & 5.7 & 335.5 & 4.8 & 2.0 & -0.9 & 2.2 \\ \hline
+		2850-4 & 2850-3 & -46.5 & 20.1 & -44.2 & 18.6 & 2.3 & -1.5 & 2.7 \\ \hline
+		1800-2 & 1800-3 & 0 & 0 & 2.5 & 3.0 & 2.5 & 3.0 & 3.9 \\ \hline \hline
+		2850-6 & 2850-3 & -46.3 & 46.9 & 4.8 & 46.5 & 50.3 & -0.4 & 50.3 \\ \hline
+		2850-5 & 2850-3 & 38.0 & -30.0 & 83.4 & -58.0 & 45.4 & -28.0 & 53.3 \\ \hline
+	\end{tabular}
+	
+	\captionof{table}{Estimator performance using the DH visibility probability model.  Each line of the table represents a comparison of distance traveled in Eastings and Northings between two dataset sites, measured by an INS, with the Eastings and Northings distance between the site position estimates using the proposed sonar imagery method with the DH model. All values are in meters. }
+	\label{tab:offsets} 
+\end{center}
+
+\noindent Important aspects of the data presented in Table \ref{tab:offsets}:
+
+\begin{itemize}
+\item \textbf{Ten of Twelve MLE Positions were Consistent with Offset Truth Data}: An error norm of less than 4m was observed in each of the first 6 offset sets, involving ten of the twelve datasets tested. Sample data and analyses for three of the offset groups with good error norms are presented in Section \ref{rov.Truth.Good}.
+\item \textbf{Two of Twelve MLE Positions were Inconsistent with Offset Truth Data}: Large error norms ($>50m$) were observed for the last two offset sets, resulting from MLE false convergence in 2850-5 and 2850-6. As shown in Table \ref{tab:nonparametricStats}, estimator distributions for sets 2850-5 and 2850-6 were characterized by very high uncertainty, quantified by low entropy values and low probability mass within 5m and 3m of the MLE.  Detailed analyses of why sets 2850-5 and 2850-6 had inaccurate MLE estimation are presented in Section \ref{rov.Truth.Bad}.
+\item The positional offset between datasets had no effect on the offset accuracy.  This is a quality of map-relative localization, as opposed to odometry-based localization where drift accumulates.  As long as the map is self-consistent, the distance between imaging sites does not affect the expected error of the offset estimate.  As an example from Table \ref{tab:offsets}, the offset error norm was $2.2m$ between sets PL-1 and PL-2 with a true position Eastings offset of $333.5m$, whereas the sixth offset set had an error norm of $3.9m$ for zero truth postion offset between the sets (in this case the vehicle was rotated in place between images, where 1800-2 had a heading of $315^{o}$, and 1800-3 had a heading of $180^{o}$). 
+\end{itemize}
+
+\noindent The following sections provide detailed analyses of the MLE offset estimation results.  
+%Section \ref{rov.Truth.Good} presents sample data and analyses for three of the offset groups with good error norms.
+%Analyses of why inaccurate MLE positions were obtained for datasets 2850-5 and 2850-6 are presented in Section \ref{rov.Truth.Bad}.
+
+\subsection{Good Offset Results}
+\label{rov.Truth.Good}
+
+The following sections present data and analyses for samples of results with good offset error norms from Table \ref{tab:offsets}.
+Accurate MLE position estimation was acheived for each of the sets presented in this section, despite there being a wide array of acoustic shadow signal-to-noise in the actual measurements across the datasets.
+
+\subsubsection{Sample \#1: PL-2, PL-3}
+\label{rov.Truth.Good1}
+
+A sample good result, with an offset error norm of $1.0m$ from Table \ref{tab:offsets}, is that of datasets PL-2 and PL-3.
+The posterior distribution for each dataset is presented in Figure \ref{fig:PLDistributions1}, showing tight convergence about uni-modal MLE peaks, as supported by the summary statistics in Table \ref{tab:nonparametricStats}.
+
+\begin{figure} [h!]	
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_pcolor_1024_2014_005}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_surf_1024_2014_005}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_pcolor_1024_2014_005}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_surf_1024_2014_005}
+		\caption{}
+  	\end{subfigure}
+  		  	
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_pcolor_1024_2014_007}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_surf_1024_2014_007}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_pcolor_1024_2014_007}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_surf_1024_2014_007}
+		\caption{}
+  	\end{subfigure}
+  	
+	\caption{Testing data posterior probability distributions for datasets PL-2 (top row) and PL-3 (bottom row). \emph{Column 1} Coarse-resolution distribution surface 2-D view. \emph{Column 2} Coarse-resolution 3-D view. \emph{Column 3} Fine-resolution 2-D view. \emph{Column 4} Fine-resolution 3-D view. }
+	\label{fig:PLDistributions1}
+\end{figure}
+
+The tight convergence about MLE values is a result of good alignment between actual and MLE expected measurements, as seen in Figure \ref{fig:PLPlots1}.
+In both cases, there is high signal-to-noise in the shadow data, especially for set PL-3.
+Strong shadow regions in each set are well-predicted by the MLE expected measurement, as observable in both the MLE expected measurement itself and in the green pixels of the alignment plot.
+
+\begin{figure} [h!]
+	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{meas_1024_2014_005_c}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{measBinary_1024_2014_005_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_1024_2014_005_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_1024_2014_005_c}
+		\caption{}
+  	\end{subfigure}
+  	
+  	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{meas_1024_2014_007_c}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{measBinary_1024_2014_007_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_1024_2014_007_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_1024_2014_007_c}
+		\caption{}
+  	\end{subfigure}
+  	
+  	\caption{Actual and MLE expected plots for datasets PL-2 (top row) and PL-3 (bottom row). \emph{Column 1} Sonar images, shown in \emph{display} form \emph{Column 2} Actual measurements. Black pixels are shadow, white pixels are visible. \emph{Column 3} Expected measurements for the MLE. Red indicates a higher visibility probability. \emph{Column 4} MLE Alignment plots as defined in Section \ref{rov.Summary.Alignment}}
+	\label{fig:PLPlots1}
+\end{figure}
+
+\subsubsection{Sample \#2: 2850-1, 2850-2}
+\label{rov.Truth.Good2}
+
+Another sample good result, with an offset error norm of $1.2m$ from Table \ref{tab:offsets}, is that of datasets 2850-1 and 2850-2.
+The posterior distribution for each dataset is presented in Figure \ref{fig:2850Distributions2}.
+Unlike the results for PL-2 and PL-3, there is some multi-modality evident in the fine-resolution plots in Figure \ref{fig:2850Distributions2}.
+However, the vast majority of probability mass is tightly grouped about the MLE.
+There is a dominant MLE peak for 2850-1, clear in the fine-resolution plots, and there are closely grouped neighboring peaks shown in the fine-resolution plots for 2850-2.
+As presented in Table \ref{tab:nonparametricStats}, $75\%$ of probability mass is within $3m$ of the MLE for 2850-1, and $86\%$ of probability mass is within $3m$ of the MLE for 2850-2.
+
+\begin{figure} [h!]	
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_pcolor_562_13}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_surf_562_13}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_pcolor_562_13}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_surf_562_13}
+		\caption{}
+  	\end{subfigure}
+  		  	
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_pcolor_562_14}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_surf_562_14}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_pcolor_562_14}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_surf_562_14}
+		\caption{}
+  	\end{subfigure}
+  	
+	\caption{Testing data posterior probability distributions for datasets 2850-1 (top row) and 2850-2 (bottom row). \emph{Column 1} Coarse-resolution distribution surface 2-D view. \emph{Column 2} Coarse-resolution 3-D view. \emph{Column 3} Fine-resolution 2-D view. \emph{Column 4} Fine-resolution 3-D view. }
+	\label{fig:2850Distributions2}
+\end{figure}
+
+The information content in the two datasets is quite different, as shown in the plots of Figure \ref{fig:2850Plots2}. Dataset 2850-1 is marked by a large, dominant shadow region with many small shadow ripples, whereas 2850-2 is marked by a smaller horizontal shadow at a medium range in the image.
+
+The 2850-1 result is marked by both strong agreement and some strong disagreement.
+The large shadow region of 2850-1 is well-predicted by the MLE expected measurement, as seen in the top row of Figure \ref{fig:2850Plots2}.
+In particular, the right alignment plot shows a good shadow alignment in green pixels for the large, dominant shadow.
+There are also many blue pixel diagreements in the alignment plot.
+However, many of the actual shadow features marked as disagreements in the alignment plot show up as lower visibility probability features in the MLE expected measurement.
+These features are not below a probability of $0.5$, and consequently the alignment plot tags them as disagreements (see Section \ref{rov.Summary.Alignment}).
+
+Comparison of the actual and MLE expected measurements for 2850-1 indicates that there is \emph{over-prediction} of visibility probability in the expected measurement.
+This is entirely plausible, given the limited training data used for parameter fitting of the DH visibility probability model.
+Further, the DH model fit estimated a parameter $\mu = -0.2m$, which biases the shadow/visible boundary in terms of differential height toward a stricter restriction on shadow classification.
+It may be that this $\mu$ value does not fit this particular dataset as well as it should.
+Nonetheless, this over-prediction of visibility probability does not preclude the estimator from converging on an MLE position that agrees well with the truth offset.
+
+The 2850-2 result is very different from that of 2850-1, and is marked by a thin, horizontal shadow region.
+As will be discussed further in Sections \ref{rov.Truth.Bad1} and \ref{rov.LOS}, the situation where the actual measurement is one small shadow region is a challenging one for the estimator.
+In the case of 2850-2, the estimator is able to converge on the MLE position that agrees very well with the truth offset.
+As seen in the bottom right alignment plot of Figure \ref{fig:2850Plots2}, there is very strong shadow agreement for the thin, horizontal shadow.
+As will be discussed further in Section \ref{rov.LOS}, the alignment of this shadow highlights a strength of the DH visibility model in enforcing agreement for this more likely shadow region according to the topography, while allowing for disagreement over less likely shadow regions (and noise).
+
+\begin{figure} [h!]
+	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{meas_562_13_c}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{measBinary_562_13_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_562_13_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_562_13_c}
+		\caption{}
+  	\end{subfigure}
+  	
+  	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{meas_562_14_c}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{measBinary_562_14_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_562_14_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_562_14_c}
+		\caption{}
+  	\end{subfigure}
+  	
+  	\caption{Actual and MLE expected plots for datasets 2850-1 (top row) and 2850-2 (bottom row). \emph{Column 1} Sonar images, shown in \emph{display} form \emph{Column 2} Actual measurements. Black pixels are shadow, white pixels are visible. \emph{Column 3} Expected measurements for the MLE. Red indicates a higher visibility probability. \emph{Column 4} MLE Alignment plots as defined in Section \ref{rov.Summary.Alignment}}
+	\label{fig:2850Plots2}
+\end{figure}
+
+\subsubsection{Sample \#3: 2850-3, 2850-4}
+\label{rov.Truth.Good3}
+
+A third sample good result, with an offset error norm of $2.7m$ from Table \ref{tab:offsets}, is that of datasets 2850-3 and 2850-4.
+The posterior distribution for each dataset is presented in Figure \ref{fig:2850Distributions3}, showing strong convergence around the MLE positions, as supported by the summary statistics in Table \ref{tab:nonparametricStats}.
+
+There is some multi-modality evident in the distributions of both sets.
+In the 2850-3 result (upper row of Figure \ref{fig:2850Distributions3}), multi-modality in the coarse-resolution distribution is clearly visible, though these multi-modal peaks collapse into a single peak in the fine-resolution estimation. 
+This collapse into a single peak at the fine-resolution scale can happen as the true mode lies between the coarse-resolution samples.  
+With the fine-resolution estimates incorporated into the distribution, the probability mass is tightly grouped about the MLE, with Table \ref{tab:nonparametricStats} showing $94\%$ of the probability mass within $3m$ of the MLE position.
+In the 2850-4 result, multi-modality in both the coarse- and fine-resolution distributions is present.
+There is a very small amount of probability mass roughly $-30m$ Eastings of the MLE.
+The vast majority of the probability mass is closer to the MLE, though more spread than the 2850-3 result, evidenced by $66\%$ of the probability mass within $5m$ of the MLE, and only $45\%$ within $3m$ of the MLE (from Table \ref{tab:nonparametricStats}).
+
+\begin{figure} [h!]	
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_pcolor_12062014_016}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_surf_12062014_016}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_pcolor_12062014_016}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_surf_12062014_016}
+		\caption{}
+  	\end{subfigure}
+  		  	
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_pcolor_12062014_025}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_surf_12062014_025}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_pcolor_12062014_025}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_surf_12062014_025}
+		\caption{}
+  	\end{subfigure}
+  	
+	\caption{Testing data posterior probability distributions for datasets 1800-1 (top row) and 1800-2 (bottom row). \emph{Column 1} Coarse-resolution distribution surface 2-D view. \emph{Column 2} Coarse-resolution 3-D view. \emph{Column 3} Fine-resolution 2-D view. \emph{Column 4} Fine-resolution 3-D view. }
+	\label{fig:2850Distributions3}
+\end{figure}
+
+Figure \ref{fig:2850Plots3} presents plots that demonstrate agreement between the actual and MLE expected measurements.  
+The top row presents the plots for dataset 2850-3, where there is strong shadow and visible pixel agreement evident in the alignment plot.
+The bottom row presents the results for dataset 2850-4, where there is also a good amount of shadow and visibile pixel agreement.
+In particular, many of the large shadow features in the actual measurement are mirrored in the MLE expected measurement.
+However, s discussed in the previous section with respect to dataset 2850-1, there appears to be over-prediction of visibility probability in the expected measurement. 
+This over-prediction leads to a greater number of disagreement pixels in the alignment plot.
+However, even with this amount of disagreement, the norm of the offset error is limited to $2.7m$, as shown in Table \ref{tab:offsets}.
+
+\begin{figure} [h!]
+	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{meas_12062014_016_c}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{measBinary_12062014_016_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_12062014_016_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_12062014_016_c}
+		\caption{}
+  	\end{subfigure}
+  	
+  	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{meas_12062014_025_c}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{measBinary_12062014_025_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_12062014_025_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_12062014_025_c}
+		\caption{}
+  	\end{subfigure}
+  	
+  	\caption{Actual and MLE expected plots for datasets 2850-3 (top row) and 2850-4 (bottom row). \emph{Column 1} Sonar images, shown in \emph{display} form \emph{Column 2} Actual measurements. Black pixels are shadow, white pixels are visible. \emph{Column 3} Expected measurements for the MLE. Red indicates a higher visibility probability. \emph{Column 4} MLE Alignment plots as defined in Section \ref{rov.Summary.Alignment}}
+	\label{fig:2850Plots3}
+\end{figure}
+
+\subsection{Bad Offset Resuls}
+\label{rov.Truth.Bad}
+
+Of the eight offset datasets presented in Table \ref{tab:offsets}, two sets had offset error norms in excess of $50m$.
+These large offset error norms are the result of (highly) inaccurate MLE positions for two of the twelve position estimation datasets evaluated: 2850-6 and 2850-5.
+
+The high-level explanations of why these datasets led to false MLE convergence can be summarized as follows:
+
+\begin{itemize}
+
+\item \textbf{Low Shadow Signal-to-Noise with Misalignment}: When the true shadow signal-to-noise is low in actual measurement, accurate MLE estimation can be more difficult.  Accurate MLE positions were achieved for the low signal-to-noise datasets of 2850-2 and PL-1, as described in Sections \ref{rov.Truth.Good2} and \ref{rov.LOS.PL1}, respectively.  However, for dataset 2850-6 the MLE position was highly inaccurate.  As detailed in Section \ref{rov.Truth.Bad1}, this inaccurate estimation was the result of misalignment between the actual and expected measurement at the true imaging location.
+
+\item \textbf{Dominant Shadow Information Near Image Border with Misalignment}: When the dominant shadow content is near the image border, i.e. near the maximum range of the sensor, accurate MLE estimation can be more difficult.  The truncation of the shadow region by the maximum range precludes the sensor from observing the visibile region behind the shadow, which is very useful information.  This truncation can lead to increased shadow region self-similarity across expected measurements, resulting in convergence on noise.  An accurate MLE position was achieved for dataset 2850-4, which has dominant shadows near the image border, as presented in Section \ref{rov.Truth.Good3}.  However, for dataset 2850-5 the MLE position was highly inaccurate.  As detailed in Section \ref{rov.Truth.Bad2}, this inaccurate estimation was the result of misalignment between the actual and expected measurement at the true imaging location, leading the estimator to more heavily weight the incorrect location.
+
+\end{itemize}
+
+\subsubsection{Bad Result \#1: 2850-6}
+\label{rov.Truth.Bad1}
+
+The eigth offset result presented in Table \ref{tab:offsets} shows an offset error norm in excess of $50m$, which is caused by an incorrect MLE for dataset 2850-6.
+Figure \ref{fig:badRes1} presents measurement/alignment plots and posterior distribution plots for 2850-6.
+There are a few key takeaways from the figure:
+
+\begin{itemize}
+\item \textbf{Spread, Multi-Modality}: The posterior distribution is multi-modal, and spread over a large area. This spread, multi-modality is reflected in high entropy (3.22) and low $\alpha_3$ (0.08), $\alpha_5$ (0.16) values in Table \ref{tab:nonparametricStats}.  This spread is evident in both the coarse- and fine-resolution posterior distributions.
+\item \textbf{Little Useful Shadow Information}: The only useful shadow information is a small horizontal shadow with low-to-mid range. Images with little to no shadow content pose a challenge for the estimator, though the estimators for datasets 2850-2 and PL-1 obtained accurate MLE positions with similarly few usable shadow pixels.
+\item \textbf{``Null'' MLE Chosen}: The ``null'' solution of a MLE with little to no expected shadow content is generated by the estimator. This results from misalignment of the actual shadow content with the expected shadow content for the true vehicle position.
+\end{itemize}
+
+\begin{figure} [h!]
+	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{meas_12062014_018_c}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{measBinary_12062014_018_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_12062014_018_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_12062014_018_c}
+		\caption{}
+  	\end{subfigure}
+
+	\centering
+	\begin{subfigure}[b]{0.33\textwidth}
+                \includegraphics[width=\textwidth]{PMF_pcolor_12062014_018}
+		\caption{}
+  	\end{subfigure}
+  	\hspace{8ex}
+  	\centering
+	\begin{subfigure}[b]{0.33\textwidth}
+                \includegraphics[width=\textwidth]{PMF_surf_12062014_018}
+		\caption{}
+  	\end{subfigure}
+  	
+  	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_pcolor_12062014_018}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_surf_12062014_018}
+		\caption{}
+  	\end{subfigure}
+  	
+	\caption{Actual and MLE expected plots for 2850-6, along with posterior distribution plots. The first row presents the sonar image, actual measurement, MLE expected measurement, and alignment plot. The bottom row presents posterior distribution plots.}
+	\label{fig:badRes1}
+\end{figure}
+
+The explanation for why the ``null'' solution achieved the highest likelihood can be found with inspection of the best-guess true vehicle position.
+The best-guess true vehicle position is obtained by using the truth offset from the 2850-3 MLE position.
+As supported by the data in Table \ref{tab:nonparametricStats} and displayed in Figures \ref{fig:2850Distributions3} and \ref{fig:2850Plots3}, the 2850-3 MLE position is trustworthy.
+
+Figure \ref{fig:badExp1} presents the expected measurement and alignment plot of the best-guess map-relative position for dataset 2850-6.  
+This expected measurement lead to a likelihood that was lower than that of the ``null'' solution shown in Figure \ref{fig:badRes1}.
+While the alignment plot in Figure \ref{fig:badExp1} shows some qualitatitve shadow agreement that is convincing as to this position being near the truth, the misalignment quantitatively drives the likelihood this position down.
+Shadows are over-predicted in the expected measurement relative to the actual measurement, leading to disagreement.
+In particular, the probability in those misaligned shadows is high (i.e. the visibility probabilities are very low, as seen in blue in the expected measurement).
+Ultimately, the estimator is ``choosing'' the null solution over this true position because the expected measurement is too confident in the misaligned expected shadows.
+The reason for the misalignment is hard to decipher, as it could stem from any combination of map errors or unmodeled sonar physics effects.
+
+\begin{figure} [h!]
+	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{visprobs_nocolorbar_12062014_018_TRUE_c}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{alignment_12062014_018_TRUE_c}
+		\caption{}
+  	\end{subfigure}
+
+	\caption{Expected measurement and alignment plot for best-guess 2850-6 map-relative position.  Note the disagreement in the alignment plot.}
+	\label{fig:badExp1}
+\end{figure}
+
+\subsubsection{Bad Result \#2: 2850-5}
+\label{rov.Truth.Bad2}
+
+The seventh offset result presented in Table \ref{tab:offsets} shows an offset error norm in excess of $50m$, which is caused by an incorrect MLE for dataset 2850-5.
+Figure \ref{fig:badRes2} presents measurement/alignment plots and posterior distribution plots for 2850-5.
+There are a few key takeaways from the figure:
+
+\begin{itemize}
+\item \textbf{Spread, Multi-Modality}: The posterior distribution is multi-modal, and spread over a large area. This spread, multi-modality is reflected in high entropy (2.86) and low $\alpha_3$ (0.15), $\alpha_5$ (0.29) values in Table \ref{tab:nonparametricStats}.
+\item \textbf{Major Shadows near Image Border}: The major shadow content is near the image border. The shadow region is truncated by the image border, so the other side of the shadow is not observable.  It should be noted that this was also the case for 2850-4, but to a lesser extent.
+\item \textbf{Decent Agreement}: Despite being an inaccurate MLE position, there is qualitatively decent agreement between the actual and MLE expected measurements.  This agreement is visible as the great number of green and red pixels in the alignment plot of Figure \ref{fig:badRes2}. This high qualitative agreement makes identification of false convergence challenging, but that is where the estimator statistics must be used in order to evaluate the risk of false convergence.
+\end{itemize}
+
+\begin{figure} [h!]
+	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{meas_12062014_029_c}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{measBinary_12062014_029_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_12062014_029_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_12062014_029_c}
+		\caption{}
+  	\end{subfigure}
+
+	\centering
+	\begin{subfigure}[b]{0.33\textwidth}
+                \includegraphics[width=\textwidth]{PMF_pcolor_12062014_029}
+		\caption{}
+  	\end{subfigure}
+  	\hspace{8ex}
+  	\centering
+	\begin{subfigure}[b]{0.33\textwidth}
+                \includegraphics[width=\textwidth]{PMF_surf_12062014_029}
+		\caption{}
+  	\end{subfigure}
+  	
+  	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_pcolor_12062014_029}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_surf_12062014_029}
+		\caption{}
+  	\end{subfigure}
+  	
+	\caption{Actual and MLE expected plots for 2850-5, along with posterior distribution plots. The first row presents the sonar image, actual measurement, MLE expected measurement, and alignment plot. The bottom row presents posterior distribution plots.}
+	\label{fig:badRes2}
+\end{figure}
+
+As was done in the previous section, the best-guess true vehicle position was obtained using the truth offset from the 2850-3 MLE position.
+Figure \ref{fig:badExp2} presents the expected measurement and alignment plot of the best-guess map-relative position for dataset 2850-5, along with those of the MLE.
+As was the case for 2850-1 and 2850-4, the expected measurement for the best-guess position seems to over-predict visibility probability.  
+Close inspection of the expected measurement and alignment plot for the best-guess position shows disagreement pixels for actual shadow that is mirrored by lower visibility probability that is not below $0.5$.
+Comparison of the MLE and best-guess alignment plots does indicate better qualitative alignment for the MLE, though the two images are close.
+Ultimately, the misalignment of the actual measurement with the expected measurement for the best-guess truth position leads to a lower likelihood.
+As was the case in the previous section, this misalignment may result from any combination of map errors and unmodeled sonar physics.
+
+\begin{figure} [h!]
+	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{visprobs_nocolorbar_12062014_029_TRUE_c}
+                \caption{Best-Guess Expected}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{alignment_12062014_029_TRUE_c}
+		\caption{Best-Guess Alignment}
+  	\end{subfigure}
+  	
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_12062014_029_c}
+                \caption{MLE Expected}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_12062014_029_c}
+		\caption{MLE Alignment}
+  	\end{subfigure}
+
+	\caption{2850-5 expected measurements and alignment plots for best-guess position (top row) and the MLE (bottom row).   }
+	\label{fig:badExp2}
+\end{figure}
+
+\section{LOS vs. DH Model Performance Comparison}
+\label{rov.LOS}
+
+In order to investigate the utility of the DH model over the Line-of-Sight (LOS) model, estimator performance was tested using the LOS visibility model, which is detailed in Section \ref{visibility.Visibility.LOS}.
+Results in this section demonstrate that in terms of MLE accuracy, the DH model outperforms the LOS model in cases where the measured shadow signal-to-noise is lower, and in cases with higher signal-to-noise the models perform similarly well.
+
+A sample of test set results using the LOS is presented in Table \ref{tab:nonparametricStatsLOS}, ordered from top to bottom in ascending order of entropy (as in Table \ref{tab:nonparametricStats} for estimator performance with the DH model).
+Comparison of the DH results in Table \ref{tab:nonparametricStats} with the LOS results in Table \ref{tab:nonparametricStatsLOS} shows that there is little to no difference in MLE positions for sets 2850-1, PL-2, and PL-3, while there are larger differences in MLE positions for sets 2850-2 and PL-1.
+
+Truth data for position offsets between sonar image datasets was used for evaluating localization performanace using the LOS model, as was presented in Section \ref{rov.Truth} for the DH model.
+For three offset sets, Table \ref{tab:offsetsLOS} provides offset error in Eastings and Northings, and the norm of offset errors.
+Additionally, the last column of the table presents the difference in offset error norm between LOS model use and DH model use for each offset set.
+For each of the three offset sets shown, the DH model outperforms the LOS model in terms of error norm.
+
+\begin{center}
+	\begin{tabular}{|c|r|r|r|r|r|}
+		\hline
+		Set & $\text{E}_\textrm{MLE}$ [m] & $\text{N}_\textrm{MLE}$ [m] & H [nats] & $\alpha_5$ & $\alpha_3$ \\ \hline
+		2850-1-LOS & 6 & 7 & 0.00 & 0.99 & 0.99 \\ \hline
+		2850-2-LOS & 1 & 30 & 0.02 & 0.97 & 0.86 \\ \hline
+		PL-2-LOS & 0 & 7 & 0.36 & 0.46 & 0.40 \\ \hline
+		PL-3-LOS & -3 & 8 & 1.03 & 0.43 & 0.39   \\ \hline
+		PL-1-LOS & -36 & 51 & 3.16 & 0.22 & 0.09 \\ \hline
+	\end{tabular}	
+	\captionof{table}{Maximum likelihood estimator statistics using the LOS visibility probability model. Non-parametric distribution statistics are provided as described in Section \ref{framework.Statistics}. \emph{Column 1} Dataset label. The prefix indexes one of the three data sites, and the suffix indicates the particular set. \emph{Columns 2 and 3} MLE position in Eastings and Northings, respectively, relative to the USBL estimate. \emph{Column 4} Estimator distribution entropy, in nats, as described in Section \ref{framework.Statistics.Entropy}.  \emph{Columns 5 and 6} Distribution probability mass within $5m$ and $3m$ of the MLE, respectively. }
+	\label{tab:nonparametricStatsLOS} 
+\end{center}
+
+\begin{center}
+	\begin{tabular}{|c|c|r|r|r|c|}
+		\hline
+		Site 1 & Site 2 & $\Delta \text{E}_\textrm{ERR}$ & $\Delta \text{N}_\textrm{ERR}$ & $||\text{Err}||$ & $||\text{Err}|| - ||\text{Err}||_{\text{DH}}$ \\ \hline
+		PL2-LOS & PL3-LOS & -1.2 & 1.6 & 2.0 & 1.0 \\ \hline
+		2850-1-LOS & 2850-2-LOS &  -1.7 & 7.7 & 7.9 & 6.7 \\ \hline 
+		PL1-LOS & PL2-LOS & 32.0 & -47.9 & 57.6 & 55.4 \\ \hline
+	\end{tabular}
+	\captionof{table}{Estimator performance using the LOS visibility probability model for the same sites as presented in Table \ref{tab:offsets}. Each line of the table represents a comparison of distance traveled in Eastings and Northings between two dataset sites, measured by an INS, with the Eastings and Northings distance between the site position estimates using the sonar imagery method with the LOS model. The last column of the table presents the difference in offset error norm using the LOS and DH models (note that the LOS offset error is greater than that of the corresponding DH error entry in Table \ref{tab:offsets} for each case). All values are in meters. }
+	\label{tab:offsetsLOS} 
+\end{center}
+
+\subsection{Sample Similar Model Performance: PL-3}
+\label{rov.LOS.PL3}
+
+When the shadow signal-to-noise is high in the actual measurement, the MLE position estimation is consistent across estimators using either the DH or LOS visibility probability models.  
+The reason for this consistency is that the strong shadow signal in the measurement reduces the necessity for differentiating between more and less likely shadows.
+
+Figure \ref{fig:los1} presents the MLE expected measurements and alignment plots for estimators using the DH and LOS models, where the actual measurement is as shown in Figure \ref{fig:PLPlots1}.
+The expected measurement using the DH model is characterized by clean-lined and large, high-confidence shadows (dark blue), surrounded by high visibility probability regions.
+As such, there is little difference quantitatively from the LOS expected measurement.
+This lack of a significant difference, and the abundance of shadow information, explains why the MLE estimation was similar across the two estimators.
+
+\begin{figure} [h!]
+	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_1024_2014_007_c}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_1024_2014_007_c}
+		\caption{}
+  	\end{subfigure}
+  	
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_1024_2014_007_LOS_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_1024_2014_007_LOS_c}
+		\caption{}
+  	\end{subfigure}
+  	
+	\caption{MLE expected measurements and alignment plots for dataset PL-3 as calculated through use of the DH (top row) and LOS (bottom row) visibility models.}
+	\label{fig:los1}
+\end{figure}
+
+\subsection{Sample Differing Model Performance \#1: 2850-2}
+\label{rov.LOS.28502}
+
+The strength of the DH visibility model is more clearly evident when there is less shadow content in the sonar image.
+Because the DH model quantifies visibility confidence according to the severity of line-of-sight occlusion (measured by the differential height metric), the likelihood function rewards the alignment of more likely shadow regions, and punishes misalignment of less likely shadows (and noise) less than the LOS model does.
+
+Figure \ref{fig:los2} presents the MLE expected measurements and alignment plots for estimators using the DH and LOS models, where the actual measurement is as shown in Figure \ref{fig:2850Plots2}.
+The alignment plots tell the story of why the DH estimator outperforms the LOS estimator.
+The alignment plot for the DH model shows strong shadow pixel alignment along the dominant horizontal shadow. 
+The reason for this alignment is clear in the corresponding DH expected measurement, where the horizontal shadow region is marked by significantly lower visibility probabilities (blue).
+As such, the likelihood of this MLE measurement is higher because it aligns high-confidence shadow pixels with actual shadows.
+
+Conversely, the LOS expected measurement treats all line-of-sight shadows equally, and thus the likelihood function places no higher reward on aligning the dominant horizontal shadow.  
+Instead, the LOS MLE alignment plot shows that part of the dominant shadow is aligned, and then there are some alignments on smaller shadow blips throughout the image domain.
+While these blip alignments add up to this MLE position having a higher likelihood, the MLE position is biased off of the truth.
+As presented in Table \ref{tab:offsetsLOS}, this difference in MLE position for the LOS model resulted in an increase in offset error norm from $1.2m$ for the DH model estimator to $7.9m$ for the LOS.
+
+\begin{figure} [h!]
+	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_562_14_c}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_562_14_c}
+		\caption{}
+  	\end{subfigure}
+  	
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_562_14_LOS_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_562_14_LOS_c}
+		\caption{}
+  	\end{subfigure}
+  	
+	\caption{MLE expected measurements and alignment plots for dataset 2850-2 as calculated through use of the DH (top row) and LOS (bottom row) visibility models.}
+	\label{fig:los2}
+\end{figure}
+
+
+\subsection{Sample Differing Model Performance \#2: PL-1}
+\label{rov.LOS.PL1}
+
+Comparison of DH and LOS model performance for the PL-1 dataset presents a great difference in MLE position.
+The PL-1 sonar image is an extreme case of little usable shadow information in the presence of noise, and as such is very challenging for the estimator.
+For reference, the PL-1 sonar image, actual measurement, DH model MLE expected measurement and alignment image, and correlation plots are presented in Figure \ref{fig:pl1}.
+
+\begin{figure} [h!]
+	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{meas_1024_2014_004_c}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{measBinary_1024_2014_004_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_1024_2014_004_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_1024_2014_004_c}
+		\caption{}
+  	\end{subfigure}
+
+	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_pcolor_1024_2014_004}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{PMF_surf_1024_2014_004}
+		\caption{}
+  	\end{subfigure} 	
+  	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_pcolor_1024_2014_004}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.24\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_surf_1024_2014_004}
+		\caption{}
+  	\end{subfigure}
+  	
+	\caption{Actual and MLE expected plots for PL-1 using the DH visibility model, along with posterior distribution plots. The first row presents the sonar image, actual measurement, MLE expected measurement, and alignment plot. The bottom row presents posterior distribution plots.}
+	\label{fig:pl1}
+\end{figure}
+
+As presented in Table \ref{tab:offsetsLOS}, the LOS estimator MLE leads to an offset error norm of $57.6m$, as compared $2.2m$ for the DH estimator MLE.
+As in the previous section, the reason for this difference is the ability of the DH model to allow the likelihood function to reward the alignment of more likely shadow data (based on the topography map).
+
+Figure \ref{fig:los3} presents the MLE expected measruements and alignment plots for the estimators using the DH model (top row) and the LOS model (bottom row).
+As shown in Figure \ref{fig:los3}, the DH expected measurement has higher confidence in the small shadow region caused by occlusion from a rock outcropping (see Figure \ref{fig:pl1} for sonar image and actual measurement).
+It is the alignment of this shadow region that rewards the MLE position, which in turn agrees well with the offset truth data as presented in Table \ref{tab:offsets}.
+
+Conversely, the LOS model treats all line-of-sight shadows equally, and the misaligned shadows in the true position expected measurement drop its likelihood using the LOS model.
+Instead, as was the case for dataset 2850-6, the MLE is chosen as the ``null'' solution.
+In this case, the ``null'' solution MLE with the LOS model is roughly $50m$ from the true position, leading to the large offset error norm result.
+
+\begin{figure} [h!]
+	\centering
+	\begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_1024_2014_004_c}
+                \caption{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_1024_2014_004_c}
+		\caption{}
+  	\end{subfigure}
+  	
+  	\centering
+	\begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_10242014_LOS_c}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{ralignment_10242014_LOS_c}
+		\caption{}
+  	\end{subfigure}
+  	
+	\caption{MLE expected measurements and alignment plots for dataset PL-1 as calculated through use of the DH and LOS visibility models.}
+	\label{fig:los3}
+\end{figure}

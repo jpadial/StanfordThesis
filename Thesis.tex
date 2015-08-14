@@ -1,0 +1,64 @@
+\documentclass[12pt]{report}
+\include{packages}
+
+\graphicspath{{./../Figures/}}
+\DeclareGraphicsExtensions{.png, .jpg}
+
+\setcounter{secnumdepth}{3}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{algorithm, algpseudocode}
+%\usepackage[table,xcdraw]{xcolor}
+
+% Chapter selection option
+%\includeonly{chIntroduction}
+% or
+% \typein{Now put in includeonly}
+
+\dept{Aeronautics and Astronautics}
+\title{Underwater Robotic Terrain-Relative Localization using Acoustic Shadows in Sonar Imagery}
+\author{Jose Padial}
+\date{August 2015}
+\principaladvisor{Stephen Rock}
+\firstreader{Per Enge}
+\secondreader{Sigrid Close}
+\submitdate{August 22, 2015}
+\setlength{\signaturespace}{.2in}
+\copyrightyear{2015}
+
+%\makenomenclature
+
+\begin{document}
+
+%\thesiscopyrightfalse
+%\copyrightfalse
+%\figurespagefalse
+%\tablespagefalse
+ 
+\beforepreface
+%\include{text/prAbstract}
+%\include{text/prAcknowledgements}
+\afterpreface
+\include{text/chIntroduction}
+%\include{text/nomenclature}
+\include{text/chRelatedWork}
+\include{text/chSonarImagery}
+\include{text/chFramework2}
+\include{text/chMeasurementModel}
+\include{text/chROVFieldResults}
+\include{text/chAUVFieldResults}
+\include{text/chConclusions}
+
+\appendix
+\include{text/apTerrain}
+         
+\bibliographystyle{abbrv}
+% ADD THE PATH TO YOUR BIBLIOGRAPHY.  BELOW ARE PATHS TO JabRefDatabaseARL on
+% Camelot for linux, windows, and mac...may not be correct for you (even if you're trying to link
+% to the JabRefDatabaseARL)
+%
+%\bibliography{/mnt/public/Users/Public/References/JabRefDatabaseARL} %linux
+%\bibliography{//camelot/Public/Users/Public/References/JabRefDatabaseARL} %windows
+\bibliography{/Volumes/public/Users/Public/References/JabRefDatabaseARL} %mac
+
+\end{document}

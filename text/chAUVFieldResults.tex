@@ -1,0 +1,156 @@
+% !TEX root = ../thesis.tex
+
+\chapter{AUV Field Results}
+\label{ch.AUV}
+
+In collaboration with the Monterey Bay Aquarium Research Institute (MBARI), sidescan sonar data were collected from an autonomous underwater vehicle (AUV) in order to test the localization methods presented in this thesis.
+
+\section{Experimental System}
+\label{auv.Experimental}
+
+Figure \ref{fig:mappingAUV} shows the MBARI Dorado-class mapping AUV used for data collection.
+The mapping AUV is equipped with a full instrumentation system for vehicle state estimation and observation/mapping.
+The following list presents onboard sensors that are relevant for this work:
+
+\begin{itemize}
+\item Edgetech 110/440 kHz sidescan sonar.
+\item Reson 200kHz mutlibeam ranging sonar.  This sonar was used to construct the seafloor topography map.
+\item Kearfott SEADeViL KN-6053 high-accuracy INS/DVL. The Kearfott INS provides a position accuracy (drift rate) of less than $0.05 \%$ DT (distance traveled)
+\item Paroscientific depth sensor.
+\end{itemize}
+
+\begin{figure}[!h]
+	\centering
+		\includegraphics[width=0.8\textwidth]{dorado}
+	\caption{MBARI Dorado-class mapping AUV.  Image by Peter Kimball.}
+	\label{fig:mappingAUV}
+\end{figure}
+
+\subsection{Sonar Image Field Data}
+\label{auv.Experimental.Sonar}
+
+Each field data set comprises sidescan sonar measurements and vehicle state measurements:
+
+\begin{itemize}
+\item \textbf{Sidescan sonar measurements}: Sidescan sonar ping data is recorded for each measurement timestep, where a sonar ping is an intensity versus range (time of flight) profile, as detailed in Chapter \ref{ch.SonarImagery}.
+\item \textbf{Attitude Estimate}: The vehicle heading, pitch, and roll estimates are measured (accurately) by the Kearfott INS/DVL.
+\item \textbf{Translation Estimate}: The translation between measurements is estimated by the Kearfott through integration of DVL terrain-relative velocity measurements.
+\item \textbf{Altitude Estimate}: The vehicle altitude above the seafloor terrain as provided by using the four ranges of the DVL.
+\item \textbf{Depth Estimate}: Vehicle depth estimate from the Paroscientific sensor.
+\end{itemize}
+
+\section{Field Data Sites}
+\label{auv.Field}
+
+Field data were collected at a site in the Gulf of California (GOC).
+The site has diverse topographical characterstics, and as such affords a diverse data set for evaluation of the localization capability presented in this thesis.
+Figure \ref{fig:gofMapAUV} shows a 1m digital elevation map (DEM) of the site, built from AUV mapping data by Dave Caress at MBARI using MB-System software \cite{Caress2006}.
+The vehicle mapping trajectory is a lawn-mower pattern, shown in black over the map in Figure \ref{fig:gofMapAUV}
+
+\begin{figure}[!h!]
+	\centering
+		\includegraphics[width=0.65\textwidth]{gofMap}
+	\caption{Seafloor topography map of a Gulf of California site at 1-m resolution, generated from an AUV mission conducted by Dave Caress at MBARI with MB-System software.}
+	\label{fig:gofMapAUV}
+\end{figure}
+
+\section{Model Parameter Fitting from Field Data}
+\label{auv.dhFit}
+
+A strength of the Differential Height (DH) visibility probability model is its simplicity, which makes it both computationally tractable and tunable to experimental field data.
+For the case of underwater localization using imaging sonar, given ``true" vehicle locations with respect to underwater terrain maps, the free parameters of the DH model can be fit to measured visibility probabilities, which means fitting the parameters of the sigmoid function given by (\ref{eq:sigmoid}) that translates differential heights into visibility probabilities.
+
+\subsection{Training / Testing Data}
+\label{auv.Field.Training}
+
+The GOC dataset is segmented into 1000 sidescan sonar ping sections, equivalent to roughly $500m$ distance traveled. 
+Each sonar ping is an intensity versus range measurement profile, with a maximum range of $200m$ (see Section \ref{ch.SonarImagery} for detail on sidescan sonar measurements).
+Each sonar ping profile was downsampled by a factor of 10 such that there are 350 range bins in a sonar ping, where for this work only the starboard data was used.
+
+For DH model parameter fitting, training and testing datasets were formed according to a random 60\%/40\% partition of the data.
+Unlike the ROV parameter fitting as described in Section \ref{rov.dhFit}, there is a large volume of data available for the AUV sidescan sonar parameter fitting, especially for fitting only four parameters as is the case with the DH model.
+Statistics on the training and testing data are as follows:
+
+\begin{align*}
+\begin{split}
+\text{Training: number of pings} &\sim 70 \hspace{1ex} \text{thousand} \\
+\text{Training: number of data points} &\sim 24.5 \hspace{1ex} \text{million} \\
+\text{Testing: number of pings} &\sim 48 \hspace{1ex} \text{thousand} \\
+\text{Testing: number of data points} &\sim 16.8 \hspace{1ex} \text{million}
+\end{split}
+\end{align*}
+
+Furthermore, unlike the ROV case where pseudo-truth positions needed to be estimated in a circular manner with respect to the parameter fitting, for the AUV parameter fitting case there is positional truth data: the mapping trajectory used to create the topography map. 
+As such, the parameter fitting can be done by finding the optimal paramter values according to Equation \ref{eq:opt} using the differential height images from the true position locations.
+
+\subsection{Parameter Fit}
+\label{auv.dhFit.Parameter}
+
+Optimal DH model sigmoid parameters from \ref{eq:sigmoid} are found according to the minimization problem \ref{eq:opt}.
+In order to solve \ref{eq:opt}, the following constants are assigned \emph{a priori}:
+
+\begin{itemize}
+\item \textbf{($\delta_{\text{min}} = -3m$, $\delta_{\text{max}} = 2m$)}: Minimum and maximum differential height values, respectively, considered in the parameter optimization.
+\item \textbf{$N = 100$}: Total number of differential height bins between $\delta_{\text{min}}$ and $\delta_{\text{max}}$.
+\item \textbf{$Q_{\text{max}} = 1000$}: Number of differential height observations in the training data for a given differential height bin such that the bin is maximally weighted according to Equation \ref{eq:beta}. 
+\end{itemize} 
+
+As described in Section \ref{visibility.Visibility.DH}, the DH model may be specified with either 3 or 4 free parameters.
+The 3-parameter DH model sigmoid parameter values obtained through the optimization of Equation \ref{eq:opt3} are $(\lambda^*, \mu^*, \gamma^*) = (0.38,-0.39,1.01)$, with $\kappa = 0.5$ proscribed. 
+The 3-parameter DH model fit to the training and testing data is shown in Figure \ref{fig:sss3paramFit}.
+
+The red line in Figure \ref{fig:sss3paramFit} indicates the measured visbility probabilites, while the blue line shows the modeled probability for the fit parameters.  
+The green line shows the weights $\beta$.
+As shown in the figure, the weights are nearly uniformly 1, which is an indication (according to Equation \ref{eq:beta}) that there were more than $Q_{\text{max}}$ pixel observations for each DH bin ($Q_{\text{max}} = 1000$ for AUV data).
+
+The quality of this fit is lower than that of the ROV case presented in Figure \ref{fig:optResult}, as the measured visibility probability curve does not fit the symmetrical 3-parameter sigmoid as well.
+
+\begin{figure} [!h]
+	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{sssFit_Train_DH3}
+                \caption{Training}
+                \label{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{sssFit_Test_DH3}
+		\caption{Testing}
+		\label{}
+  	\end{subfigure}
+	\caption{3-Parameter DH model fit to field data. }
+	\label{fig:sss3paramFit}
+\end{figure}
+
+For the sidescan sonar data, the 4-parameter DH model (with $\kappa$ not fixed at $0.5$) fit was significantly better than that of the 3-parameter DH model.  
+The 4-parameter fits on training and testing data are shown in Figure \ref{fig:sss4paramFit}.
+
+\begin{figure} [!h]
+	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{sssFit_Train_DH4}
+                \caption{Training}
+                \label{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{sssFit_Test_DH4}
+		\caption{Testing}
+		\label{}
+  	\end{subfigure}
+	\caption{4-Parameter DH model fit to field data. }
+	\label{fig:sss4paramFit}
+\end{figure}
+
+The localization results presented in the remainder of this chapter use the 4-parameter DH model, with the following optimal parameter values:
+
+\large
+\begin{equation} 
+\kappa^*, \lambda^*, \mu^*, \gamma^* = (0.59, 0.36, -0.01m, 0.70m)
+\label{eq:fitParamsAUV}
+\end{equation}
+\normalsize
+
+\section{Field Results Summary}
+\label{auv.Results}
+

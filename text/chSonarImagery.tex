@@ -1,0 +1,377 @@
+% !TEX root = ../thesis.tex
+
+\chapter{Sonar Imagery: Why Use Shadows?}
+\label{ch.SonarImagery}
+
+This thesis introduces a new way to use sonar imagery for position localization with respect to a seafloor topography map.
+Specifically, acoustic shadows are used as the measurement information source in the sonar imagery.
+
+The nature of sonar imagery is explored in this chapter.  
+The spatial ambiguity of the sonar image ``range-azimuth'' space is discussed, and how this ambiguity makes the use of imaging sonar measurements for localization different than that of ranging sonar measurements.
+Further, the complexity of intensity return formation is described, and how this complexity makes predicting intensity returns from geometrical relationships alone ill-posed.
+As such, raw imaging sonar intensity returns are ill-suited for use as measurements for position localization with respect to a topography map.
+However, acoustic shadows are primarily \emph{geometric} in nature, and are well-suited to topography-relative localization.
+\\
+
+\noindent \textbf{Chapter Roadmap}:  
+
+\begin{itemize}
+
+\item \textbf{Section \ref{sonar.Widespread} Widespread Use}:  The ubiquitous use of imaging sonars, and the reasons why they are so commonplace in underwater robotics, are described.
+
+\item \textbf{Section \ref{sonar.Measurement} Measurement Process}: The details of the measurement process and the ``range-azimuth'' domain of sonar imagery are presented.  Further, the spatial ambiguity inherent to imaging sonar measurements is discussed.
+
+\item \textbf{Section \ref{sonar.Types} Imaging Sonar Types}: The three principal imaging sonar types are described: mechanically-scanned imaging sonar, multibeam imaging sonar, and sidescan sonar. 
+
+\item \textbf{Section \ref{sonar.Intensity} Intensity Return Formation}: The complexity of intensity return formation is discussed, specifically with regard to the need for more than a topography map alone for accurate intensity prediction.
+
+\item \textbf{Section \ref{sonar.Shadows} Acoustic Shadows}: The geometric nature of acoustic shadows in sonar imagery is described. Further, two important assumptions made in this work on the predictability and observability of acoustic shadows are presented.
+ 
+\end{itemize}
+
+\section{Widespread Use}
+\label{sonar.Widespread}
+
+Imaging sonars are ubiquitous in underwater robotics.
+Sonar imagery data is used for a variety of purposes, including search and rescue, obstacle avoidance, target recognition, sub-sea monitoring and inspection, and ROV/AUV navigation. 
+The imagery is usually used as a qualitative tool for human operators to detect seafloor objects such as boats, as presented in Figure \ref{fig:boats}.
+However, there has been some quantitative use of sonar imagery.
+One application of imaging sonar that has been the focus of a considerable body of quantitative research is the detection of mines as in \cite{Reed2003}. 
+
+\begin{figure}[!h]
+	\centering
+	\begin{subfigure}[b]{0.51\textwidth}
+                \includegraphics[width=\textwidth]{noaa_boat}
+                \caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.45\textwidth}
+                \includegraphics[width=\textwidth]{edgetech_boat}
+                \caption{}
+  	\end{subfigure}
+	\caption{Sonar imagery of sunken boats. (a) Image of a sunken wooden-hull ship using a mechanically-scanned imaging sonar.  Image from NOAA. (b) Sidescan sonar image of a sunken vessel.  Image from Edgetech. }	
+	\label{fig:boats}
+\end{figure}
+
+Imaging sonars are typically attractive for their large area ensonification with relatively low SWaP (size, weight, and power) and low cost as compared to other sensors with similar terrain ensonification (e.g. multibeam ranging sonar).
+Further, miniaturized imaging sonars are now coming to market that are particularly appealing for applications with challening size, weight, and power constraints.  Miniaturized mechanically-scanned imaging sonars by Tritech and Imagenex are now available with power consumption of 4W and lower, and with in-water weights of 0.2kg and lower.  The Tritech Micron DST and Imagenex 852 miniature imaging sonars are shown in Figure \ref{fig:miniImagingSonars}.  Further, many companies are scaling down power and weight for sidescan sonar systems and multibeam imaging sonars.
+
+\begin{figure}[!h]
+	\centering
+	\begin{subfigure}[b]{0.23\textwidth}
+                \includegraphics[width=\textwidth]{tritechMicron}
+                \caption{}
+  	\end{subfigure}
+  	\hspace{15ex}
+  	\centering
+	\begin{subfigure}[b]{0.38\textwidth}
+                \includegraphics[width=\textwidth]{imagenex_852_Sonar}
+                \caption{}
+  	\end{subfigure}
+	\caption{Miniature mechanically-scanned imaging sonars.  (a) Tritech Micron. Image from Tritech. (b) Imagenex 852.  Image from Imagenex.}	
+	\label{fig:miniImagingSonars}
+\end{figure}
+
+Table \ref{tab:miniSonars} presents power, weight (in water), and terrain coverage overviews for different miniaturized imaging sonars.  Also included is the Tritech SeaKing AUV/ROV side scan sonar, which is considerably larger and heavier than the other miniaturized imaging sonars in the table, but is a low-weight and and low-power sidescan sonar system.
+
+\bgroup
+\def\arraystretch{1.3}%  1 is the default, change whatever you need
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\textbf{Sensor}          &  \begin{tabular}{c} \textbf{Power} \\ \textbf{(W)} \end{tabular} & \begin{tabular}{c} \textbf{Weight }\\ \textbf{(kg)} \end{tabular} & \textbf{Terrain Coverage}   & \begin{tabular}{c} \textbf{Sensing} \\ \textbf{Modality}  \end{tabular} \\ \hline
+Imagenex 852   & 2.5  & 0.2 & \begin{tabular}{c} 50m Range, \\ Azimuth $360^{o}$ \end{tabular} & \begin{tabular}{c} Mechanically-\\scanned \\ imaging \end{tabular} \\ \hline
+Tritech Micron  & 4  & 0.18  & \begin{tabular}{c} 75m Range, \\ Azimuth $360^{o}$ \end{tabular} & \begin{tabular}{c} Mechanically-\\scanned \\ imaging \end{tabular}  \\ \hline
+Picosonar F500  & 7 & 1.3  & \begin{tabular} {c} 200m Range, \\ Azimuth $40^{o}$ \end{tabular} & \begin{tabular}{c}  Multibeam \\ imaging \end{tabular} \\ \hline
+Tritech SeaKing & 12 & 2.68  & \begin{tabular}{c} 400m swath \\ (200m range/side) \end{tabular} & Sidescan \\ \hline  
+\end{tabular}
+\caption{Miniaturized imaging sonar power, weight (in water), and terrain coverage specifications. Note that the Picosonar specifications are as advertised on \emph{www.picotech-ltd.com}, though to the author's knowledge this product has not yet been released.}
+%\caption{Miniaturized imaging sonar power, weight (in water), and terrain coverage specifications.  The Tritech SeaKing AUV/ROV sidescan sonar has been included as an example of a low-weight and low power sidescan sonar system. Note that the Picosonar specifications are as advertised on \emph{www.picotech-ltd.com}, though to the author's knowledge this product has not yet been released.}
+\label{tab:miniSonars}                                            
+\end{table}
+\egroup
+
+\section{Measurement Process}
+\label{sonar.Measurement}
+
+Imaging sonars measure reflected acoustic signal intensity versus time of flight over a span of azimuth angles.
+At each azimuth angle, the sonar transducer emits a fan-shaped pulse of acoustic energy that is narrow in azimuth angle and wide in elevation angle, as shown in Figure \ref{fig:sonarElevationUnknown2}.
+The sensor then records intensity of the reflected acoustic signal as a function of time of flight.
+
+However, sonar imagery data is typically output to the end user in terms of metric range, rather than time of flight.
+Given an estimate for sound speed velocity $c$ (typically around $1475 \hspace{0.5ex} m/s$), the following equation establishes the equivalency between range $r$ and time of flight by $\tau$:
+
+\begin{equation}
+r = \frac{1}{2} \tau c
+\label{eq:range_to_tof}
+\end{equation}
+
+\subsection{Range-Azimuth Domain}
+\label{sonar.Measurement.RangeAzimuth}
+
+In this thesis, the domain of sonar imagery will be referred to as a ``range-azimuth'' space/domain.
+This refers to the formation of a sonar image as the concatenation of intensity versus range profiles over varying azimuth angles.
+As shown in Figure \ref{fig:sonarImageRAz2}, the pixel location of each intensity value in the polar sonar image may be specified by a range and azimuth value.
+
+\begin{figure}[!h]
+	\centering
+	\begin{subfigure}[b]{0.547\textwidth}
+                \includegraphics[width=\textwidth]{sonarElevationUnknown}
+                \caption{Sonar image formation}
+                \label{fig:sonarElevationUnknown2}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.443\textwidth}
+                \includegraphics[width=\textwidth]{SonarImageAzRange}
+                \caption{Sonar image}
+                \label{fig:sonarImageRAz2}
+  	\end{subfigure}
+	\caption{Sonar image diagrams. (a) Sonar fan-shaped pulse is red and the sonar transducer origin is $S_o$. The azimuth angle (az) and range (r) of an intensity return from a terrain point (yellow circle) is known, but the elevation angle (el) is unknown. (b) In the sonar image, range is radial distance from the origin and azimuth is the angle from the up direction (vehicle forward).}	
+\end{figure}
+
+A more accurate description of the sonar image domain would be ``t.o.f.-timestep'', as sonar images are formed as the concatenation of intensity verus time of flight (t.o.f.) over sonar pulse timesteps.
+Especially for sidescan sonar images, where the transducer pulses have fixed azimuth angle in the vehicle body frame (see Section \ref{sonar.Types.Sidescan} for detail), the ``t.o.f.-timestep'' designation would be more true to the nature of the measurement.
+However, as t.o.f. is typically converted to metric range for end users of these sonar systems, the ``range-azimuth'' designation will be used in this thesis, where azimuth refers to the azimuth angle in a polar image, or equivalently the timestep for the sonar pulse.
+
+\subsection{Spatial Ambiguity}
+
+There is an unavoidable ambiguity in extrapolating spatial information from sonar imagery due to the undetermined spatial content of the signal, and this ambiguity makes the sensory data difficult to use for quantitative navigation purposes.  
+Specifically, the azimuth angle and range of a given intensity return are known, but the elevation angle is unknown, as depicted graphically in Figure \ref{fig:sonarElevationUnknown2}.
+
+When attempting to extract spatial information from sonar imagery, e.g. for target/feature mapping, a \emph{flat seafloor} assumption is often employed.
+The assumption of a flat seafloor disambiguates the unknown elevation angle of sonar image intensity returns.
+Using the flat seafloor assumption, and assuming the vehicle is stabilized with zero pitch and roll, the lateral position $x$ of a reflecting point with respect to the sonar transducer, and in the plane of the sonar pulse, may be estimated as a function of range $r$ and vehicle altitude $a$ by:
+
+\begin{equation}
+x = \sqrt{r^2 - a^2}
+\end{equation}
+
+\noindent Of course, when the seafloor is not truly flat, this assumption leads to spatial extrapolation errors.
+\\
+
+\noindent \textbf{No Flat Seafloor Assumption in this Work}:
+\\
+
+In this work, no assumption of a flat seafloor is necessary, as spatial information is not extracted from sonar imagery.
+Instead, this thesis operates in the ``opposite'' direction: knowledge of the spatial relationship between a vehicle pose (estimate) and a topography map is used to project spatial occlusion information \emph{into} the sonar image domain.
+
+\section{Imaging Sonar Types}
+\label{sonar.Types}
+
+\subsection{Mechanically-Scanned Imaging Sonar}
+\label{sonar.Types.Mechanically}
+
+Mechanically-scanned imaging sonars physically rotate the sonar transducer in azimuth in order to form a sonar image using a stepper motor.  
+At each azimuth position, a single fan-shaped sonar pulse is emitted, as depicted in Figure \ref{fig:sonarElevationUnknown2}, and the transducer then records reflected acoustic energy as a function of time.
+The emitted acoustic fan is wide in elevation and typically narrow in azimuth (e.g. $1-3^{o}$ azimuthal beam width).
+Figure \ref{fig:sonarImageRAz2} provides a sonar image collected by a Kongsberg MesoTech 1071 330 kHz mechanically-scanned imaging sonar.  
+The cyan labeling illustrates the range-azimuth space of the sonar image, where azimuth angles are denoted by bearing about the origin and range is denoted by radial distance relative to the origin.
+
+There are many operational parameters software-configurable with typical mechanically-imaged sonars, of which parameters of particular importance are:
+
+\begin{itemize}
+\item \textbf{Gain}: The gain setting adjusts the amplification of the incoming reflected acoustic signal.
+The proper setting of the gain parameter is important for capturing low-reflectance information adequately while not saturating at the high-reflectance returns.
+
+\item \textbf{Maximum range}: Maximum range can vary anywhere from $10-150m$, depending on the sonar.
+The maximum range setting determines the minimum time between azimuth pings according to the inverse of Equation \ref{eq:range_to_tof}, where $\tau$ is the minimum time between steps.
+That is, the sonar transducer must wait until the reflected acoustic energy returns from maximum range before stepping to the next azimuth position to emit another sonar ping.
+
+\item \textbf{Step size}: Step size specifies the angular step in azimuth that the sonar transducer moves between acoustic pulses.
+
+\end{itemize}
+
+\noindent The minimum time $t_{min}$ that a mechanically-scanned imaging sonar can make a full $360^{o}$ rotation is determined by the maximum range $r_{max}$, sound speed $c$, and step size $\beta$ (in degrees) according to the following relation:
+
+\begin{equation}
+t_{min} = (\frac{2 r_{max}}{c}) (\frac{360}{\beta})
+\label{eq:min_sweep_time}
+\end{equation}
+
+Using Equation \ref{eq:min_sweep_time} and a sound speed of $1475 m/s$, the minimum time for a full transducer rotation for varied maximum ranges and step sizes is tabulated in Table \ref{tab:sweepTimes}.
+
+\bgroup
+\def\arraystretch{1.5}%  1 is the default, change whatever you need
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|c|c|}
+\hline
+\multicolumn{1}{|c|}{\multirow{2}{*}{\textbf{\begin{tabular}[c]{@{}c@{}}Maximum Range \\ {[}m{]}\end{tabular}}}} & \multicolumn{3}{c|}{\textbf{\begin{tabular}[c]{@{}c@{}}Step Size \\ {[}deg{]}\end{tabular}}}              \\ \cline{2-4} 
+\multicolumn{1}{|c|}{}                                                                                              & \multicolumn{1}{c|}{\textbf{0.9}} & \multicolumn{1}{c|}{\textbf{1.8}} & \multicolumn{1}{c|}{\textbf{3.6}} \\ \hline 
+30                                                                                                                  & 16.27                             & 8.14                              & 4.07                              \\ \hline
+50                                                                                                                  & 27.12                             & 13.56                             & 6.78                              \\ \hline
+100                                                                                                                 & 54.24                             & 27.12                             & 13.56                             \\ \hline
+\end{tabular}
+\caption{Minimum times, in seconds, for $360^{o}$ rotation of a mechanically-scanned imaging sonar transducer for different maximum ranges and azimuth step sizes.  A sound speed of $1475 m/s$ was used for calculation.}
+\label{tab:sweepTimes}
+\end{table}
+\egroup
+
+There are trade-offs when considering step size and maximum range choices. 
+The first trade is between scan speed and image quality based on the choice of step size.  
+Larger step sizes lead to faster scan speeds, but there is less azimuthal resolution as a result.  
+Smaller step sizes provide higher resolution imagery at the cost of slower scan speed.  
+Similarly, the choice of maximum range involves a trade between terrain area ensonfication and scan speed.  Larger maximum ranges lead to slower scan speeds.
+
+Additionally, data smearing is a concern with mechanically-scanned imaging sonars if used while the underwater vehicle is moving. 
+Because it takes time to collect a full scan, the image will be warped by the vehicle motion.  
+The data smearing effect is worsened by larger maximum ranges.  
+Additionally, data smearing due to the motion is worsened by smaller step sizes, though there is a data smearing effect introduced by larger step sizes that is independent of the motion (due to lower azimuthal resolution).
+As such, the use of mechanically-scanned imaging sonar is best suited to situations where the underwater vehicle is motionless.
+
+\subsection{Multibeam Imaging Sonar}
+\label{sonar.Types.Multibeam}
+
+Multibeam imaging sonars form separate beams with narrow azimuth and wide elevation angles using a phased array of transducers. 
+Unlike mechanically-scanned imaging sonars, the transducer is not physically rotated.
+As such, multibeam imaging sonars largely avoid the data smearing issue associated with mechanically-scanned imaging sonars.  
+Further, given the same maximum range, a multibeam imaging sonar can produce a new sonar image at the rate of a single ping of a mechanically-scanned imaging sonar, allowing for much faster frame rates.
+
+Figure \ref{fig:blueView} provides an illustration of multibeam imaging sonar operation.  The left image is an illustration of a multibeam sonar pulse.  The right image provides an annotated sonar image from a Teledyne BlueView Technologies P-series multibeam imaging sonar.  The field of view for this image is $45^{o}$, though other P-series sonars from Teledyne BlueView have field of views of up to $130^{o}$  The beam width is $1^{o}$ in azimuth and $20^{o}$ in elevation, with beam spacing of $0.18^{o}$. 
+
+\begin{figure}[!h!]
+	\centering
+		\includegraphics[width=0.9\textwidth]{BlueViewImagingSonar}
+	\caption{Imaging sonar diagram from Teledyne BlueView Technologies.}
+	\label{fig:blueView}
+\end{figure}
+
+\subsection{Sidescan Sonar}
+\label{sonar.Types.Sidescan}
+
+Sidescan sonar systems usually consist of two transducers mounted to the port and starboard side of an underwater vehicle or towfish.
+The left image of Figure \ref{fig:sss} shows a Tritech SeaKing AUV/ROV side scan sonar, with two transducers and an electronics module.
+The right image of Figure \ref{fig:sss} shows a sidescan sonar installed on a Hydroid (Kongsberg) REMUS 100 AUV.
+
+\begin{figure}[!h]
+	\centering
+	\begin{subfigure}[b]{0.3\textwidth}
+                \includegraphics[width=\textwidth]{tritechSeaKingSSS}
+                \caption{}
+  \end{subfigure}
+  \centering
+	\begin{subfigure}[b]{0.69\textwidth}
+                \includegraphics[width=\textwidth]{remus100_1}
+                \caption{}
+  \end{subfigure}
+	\caption{\small Sidescan sonar systems. (a) Tritech SeaKing AUV/ROV sidescan sonar system showing two transducers (port and starboard) and electronics module.  Image from Tritech. (b) Hydoid REMUS 100 AUV with a sidescan sonar transducer circled in red.  Image from Kongsberg Martime. }	
+	\label{fig:sss}
+\end{figure}
+
+
+Each side of a sidescan sonar system operates by emitting a single fan-shaped pulse of acoustic energy into the water column, as illustrated by Figure \ref{fig:ssDiagram}.  
+Sidescan sonar data comprise return intensities for time of flight values, though time of flight is often internally converted to range according to Equation \ref{eq:range_to_tof} for display.
+The upper right image in Figure \ref{fig:ssDiagram} provides an annotated Tritech sidescan sonar image.
+%Figure \ref{fig:ssDiagram} provides an illustration of sidescan sonar operation along with a real sidescan sonar image obtained with an EdgeTech 110 kHz sidescan sonar.
+
+\begin{figure} [h!]
+	\centering
+	\includegraphics[width=1.0\textwidth]{tritechSSSDiagram}
+	\caption{Sidescan sonar operation diagram, image from Tritech.}
+	\label{fig:ssDiagram}
+\end{figure}
+
+Sidescan sonar imagery is typically presented in a ``waterfall'' format.  
+Intensity versus range (time of flight) return profiles are stacked vertically across timesteps, where the horizontal axis of the image is range.
+Figure \ref{fig:sssWaterfalls} presents waterfall sidescan sonar imagery. 
+The low intensity returns in the middle of the image arise from the lack of return reflectance for range less than the vehicle altitude.
+
+\begin{figure} [h!]
+	\centering
+	\begin{subfigure}[b]{0.457\textwidth}
+		\includegraphics[width=\textwidth]{scan-2205-2}
+		\caption{}
+  	\end{subfigure}
+  	\centering
+  	\begin{subfigure}[b]{0.457\textwidth}
+  		\includegraphics[width=\textwidth]{ssLowRes}
+		\caption{}
+	\end{subfigure}
+	\caption{Waterfall sidescan sonar imagery. Horizontal axis is range. Vertical axis is ``azimuth'' (time-step of the sonar ping, with later pings higher in the image).  (a) Higher resolution image obtained with a 900 kHz Edgetech sidescan sonar image (maximum range of image is  $60m$).  Image from Edgetech. (b) Lower resolution 110 kHz Edgetech sidescan sonar image.}
+%	\caption{Waterfall sidescan sonar imagery. Horizontal axis is range. Vertical axis is ``azimuth'' (time-step of the sonar ping, with later pings higher in the image).  (a) Higher resolution image obtained with a 900 kHz Edgetech sidescan sonar image (maximum range of image is  $60m$).  Image from Edgetech. (b) Lower resolution 110 kHz Edgetech sidescan sonar image. The low-intensity return areas in the middle of the sidescan images come from a lack of seafloor returns for ranges less than the vehicle altitude.}
+	\label{fig:sssWaterfalls}
+\end{figure}
+
+As with all sonar systems, there is a trade between maximum range and resolution.  
+Higher frequency sidescan sonar systems are capable of higher resolution, crisper imagery.  
+Lower frequency systems, conversely, offer greater maximum range with lower resolution.
+The left image of Figure \ref{fig:sssWaterfalls} is a higher resolution image produced by a 900 kHz Edgetech sidescan sonar system. 
+The right image of Figure \ref{fig:sssWaterfalls} is a lower resolution image produced using a 110 kHz Edgetech sidescan sonar system.
+The maximum range of the 110 kHz image is 200m, however, versus 60m for the 900 kHz image.
+\\
+
+\noindent \textbf{Range-Azimuth Consistency}:
+\\
+
+In this work the sidescan sonar image vertical axis will be referred to as ``azimuth'' for consistency of notation with other sonar imagery (i.e. from mechanically-scanned or multibeam imaging sonar).
+That is, ``azimuth'' of the ``range-azimuth'' space will more broadly identify timestep of the single-beam sonar ping.
+
+\section{Intensity Return Formation}
+\label{sonar.Intensity}
+
+The intensity reflectance values that comprise a sonar image are formed by complex processes.
+Intensity returns are functions of sonar incidence angle on the reflecting object, terrain surface composition, and water properties \cite{Bell1995}. 
+The more perpendicular the sonar incidence angle on the reflecting surface, the stronger the return, in general.
+Further, more reflective materials such as rock will lead to higher intensity returns than low reflectance materials like mud.
+Water properties such as salinity also affect the return intensities, although to a less degree than incidence angle and terrain composition. 
+
+The dependence of sonar image intensities on terrain surface composition makes its prediction from vehicle pose and a topography ill-posed.
+As such, using sonar imagery intensities as measurements in the context of a TRN filter as described in Section \ref{intro.Existing.Terrain} is ill-posed.
+Acoustic shadows, however, are formed by geometrical occlusion, and as such can be predicted from a vehicle pose and a topography map.
+
+%\section{Deformation by Viewing Angle}
+%\label{sonar.Deformation}
+%
+%The use of feature-based navigation methods on sonar imagery has limitations that are different in nature.  Feature-based techniques applied to sonar imagery necessarily extrapolate spatial information from sonar imagery in order to localize.  The fundamental problem with this spatial extrapolation is that the sonar image domain is not fully defined in 3-D space. Instead, sonar imagery record terrain reflectance in a range-azimuth space, where elevation angle to each return is unknown, as described in Secton \ref{intro.Sonar}. This spatial ambiguity of sonar imagery leads to feature deformation according to differing viewing angles that makes feature-based techniques in sonar imagery inherently problematic, as described in \cite{Rikoski2005}. 
+
+\section{Acoustic Shadows}
+\label{sonar.Shadows}
+
+Acoustic shadows are formed by \emph{geometric} occlusion of a sonar acoustic ping by a physical object, e.g. seafloor terrain, and are observable as significant drops in sonar image intensity.
+Acoustic shadows are used as the measurement information in this work because of their geometrical nature.
+
+Acoustic shadows are often the dominant information source used by human interpreters of sonar imagery.
+They carry topographical information about the occluding object.
+Figure \ref{fig:shadows_561_3} provides an example of acoustic shadows from geometric occlusion caused by a boulder in natural terrain in the Monterey Bay.  
+The left image of the figure provides the topography map for the area with the vehicle Northings-Eastings position noted as the red circle, and the red arrow providing the direction of the vehicle forward.
+The middle image shows the measured sonar image, collected by a mechanically-scanned imaging sonar.
+The right image shows acoustic shadows of the measured image.
+The large shadow regions in the upper portion of the image are caused by the boulder area.
+
+\begin{figure}[!h]
+	\centering
+	\begin{subfigure}[b]{0.38\textwidth}
+                \includegraphics[width=\textwidth]{map_561_3}
+                \caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.3\textwidth}
+                \includegraphics[width=\textwidth]{ms1000_561_3_c_brighter}
+                \caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.3\textwidth}
+                \includegraphics[width=\textwidth]{meas_shadows_561_3_ver2}
+                \caption{}
+  	\end{subfigure}
+	\caption{Acoustic shadows from terrain boulder.  (a) Topography Map with vehicle position (red dot) and vehicle forward direction (red arrow).  (b) Measured sonar image (sonar image top is vehicle forward). (c) Acoustic shadows from measured sonar image. }	
+	\label{fig:shadows_561_3}
+\end{figure}
+
+\subsection{Assumptions}
+\label{sonar.Shadows.Assumptions}
+
+In this work, two major assumptions are made with respect to the predictability and observability of acoustic shadows in sonar imagery:
+
+\begin{enumerate}
+\item Acoustic shadows are caused by straight \emph{line-of-sight} occlusion of terrain in the scan plane of the sonar pulse.
+\item Acoustic shadows caused by line-of-sight occlusion (per assumption \#1) are chiefly differentiable from ``visible'' returns (i.e. not acoustic shadows) by intensity thresholding.
+\end{enumerate}
+
+\noindent The first assumption is strictly not true.
+Accurate modeling of acoustic beam propagation, and equivalently accurate prediction of acoustic shadows, requires solution of the wave equation \cite{etter2013underwater}.
+However, straight line-of-sight ranges and ranges calculable from the wave equation differ very slightly over the maximum ranges of typical imaging sonars \cite{Riordan2005}.
+
+The results presented in this work (Chapters \ref{ch.ROV} and \ref{ch.AUV}) demonstrate that the second assumption holds reasonably well for position localization using most sonar images.
+That being said, the labeling of acoustic shadows in sonar imagery is noisy, and this assumption is especially challenged by noise caused by unmodeled effects (e.g. low surface reflectance of non-occluded terrain or multi-path reflections).

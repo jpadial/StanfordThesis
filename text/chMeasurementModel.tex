@@ -1,0 +1,685 @@
+% !TEX root = ../thesis.tex
+
+\chapter{Visibility Measurement Model}
+\label{ch.MeasurementModel}
+
+In order to use sonar imagery for topography map-relative localization, measurements (sonar imagery) must be compared to expected measurements generated from a pose estimate and a topography map.
+A \emph{measurement model} is a function that generates an expected measurement conditioned on estimated states and measured knowns.
+Prior to this work, the main obstacle to using sonar imagery with existing topography map-relative localization methods was the absence of a suitable \emph{measurement model}.
+
+This chapter introduces a measurement model that generates expected visibility images given a vehicle pose estimate and a topography map:
+
+\begin{equation}
+\tilde{\mathbf{y}}^{i} = h(\mathbf{x}^{i},\mathbf{\pi}, m)
+\label{eq:measModel}
+\end{equation}
+
+\noindent where $\tilde{\mathbf{y}}^{i}$ is the expected visbility image, $\mathbf{x}^{i}$ is the horizontal position estimate, $\mathbf{\pi} \equiv (\phi, \theta, \psi, a)$ is the vector of measured vehicle pose states, $m$ is the seafloor topography map, and $h()$ is the measurement model.
+
+This measurement model is needed for evaluation of the measurement likelihood function described in Section \ref{framework.Measurement}.  The measurement likelihood function takes as inputs the expected measurement from the measurement model and the actual measurement, which is a visbility image as described in Section \ref{framework.Measurement.Measured}.  The measurement likelihood function (\ref{eq:measWeight}) is repeated below with emphasis on the role of the measurement model:
+
+\begin{equation}
+p(\mathbf{y} | \mathbf{x}^{i}, \mathbf{\pi}, m ) = \hspace{1ex} \prod_{u \in C} h(\mathbf{x}^{i},\mathbf{\pi}, m)[u]^{\mathbf{y}[u]} (1 - h(\mathbf{x}^{i},\mathbf{\pi}, m)[u])^{(1 - \mathbf{y}[u])} 
+\label{eq:likelihoodMeasModel}
+\end{equation}
+
+\noindent where $\mathbf{y}$ is the actual measurement (visibility image), $u$ is the linear index of pixels in the imagery, and $C$ refers to the pixel domain of the correlation imagery, i.e. the rectangular pixel domain of the correlation images $\mathbf{y}_k$, $\tilde{\mathbf{y}}_k^{i}$ (see Section \ref{framework.Measurement.Correlation} for further detail). 
+
+Figure \ref{fig:likelihood2} provides a graphical depiction of the evaluation of the measurement likelihood function, where the likelihood surface over position estimates is obtained from correlation of expected measurements with the actual measurement using the measurement likelihood function.  The measurement model presented in this chapter is used to generate the expected measurements.
+
+\begin{figure}[!h]
+	\centering
+         \includegraphics[width=1.0\textwidth]{LikelihoodEstimation2_2}
+         \caption{Likelihood evaluation.  The likelihood of position estimate samples are evaluated by the likelihood function of (\ref{eq:likelihoodMeasModel}), taking the actual measurement and the expected measurement as inputs.}
+	\label{fig:likelihood2}
+\end{figure}
+
+%The details of the measurement model development are presented in the remainder of the chapter.
+\noindent \textbf{Chapter Roadmap}:
+
+\begin{itemize}
+
+\item \textbf{Section \ref{visibility.Overview} Overview}: An overview of the expected measurement generation process is presented, where the high-level steps of terrain point extraction, projection into the sonar image domain, and visibility probability modeling are introduced.
+
+\item \textbf{Section \ref{visibility.Terrain} Terrain Point Extraction}: The process of extracting terrain points from the topography map is detailed.
+
+\item \textbf{Section \ref{visibility.Projection} Projection into Sonar Image Domain}: This section presents the method for projection of terrain point visibility probabilities into the sonar image domain. This projection into the range-azimuth sonar image domain is necessary for correlation with actual measurements through the measurement likelihood function of Equation \ref{eq:measWeight}.
+
+\item \textbf{Section  \ref{visibility.Visibility} Terrain Point Visibility Probability}: Terrain point visibility probability modeling is detailed, where three models are presented: Line-of-Sight (LOS), Multivariate Normal (MVN), and Differential Height (DH). 
+The LOS model is simple, but lacks richness in modeling visibility probability.
+The MVN model is richer, but is shown to be computationally intractable.
+The DH model is shown to be richer than the LOS in modeling visibility probability, with negligibly more computational burden than the LOS model.
+
+\item \textbf{Section \ref{visibility.Tuning} Model Parameter Tuning}: The DH model is shown to be sufficiently rich to closely approximate the computationally intractable MVN model in simulation, and a methodology for fitting the DH model parameters to real field data is presented.
+
+\end{itemize}
+
+\section{Overview}
+\label{visibility.Overview}
+
+Figure \ref{fig:measModelOverview} provides an overview of the expected measurement generation process.  
+The high-level steps of the process may be summarized as:
+
+\begin{itemize}
+\item \textbf{Extract Terrain Points}: For ranges and azimuth angles that map to pixels in the Correlation Region of the sonar image domain (described in Section \ref{framework.Measurement.Correlation}), terrain points are extracted from the topography map.
+Points are organized as 2-D terrain point profiles for a given azimuth angle. 
+Section \ref{visibility.Terrain} provides the details of terrain point extraction.
+\item \textbf{Calculate Terrain Point Visibility Probabilities}: For each 2-D terrain point profile, the probability that each terrain point is not in acoustic shadow (i.e. is a visibile pixel in the actual measurement as described in Section \ref{framework.Measurement.Measured} is calculated. 
+Section \ref{visibility.Visibility} describes the modeling of terrain point visibility probabilites.
+\item \textbf{Project into the Sonar Image Domain}: The terrain point visibility probabities are projected into the sonar image domain.  
+For each azimuth in the expected measurement, the range pixels are assigned visibility probabilities through linearly interpolation between the projected terrain point visibility probabilities, as detailed in Section \ref{visibility.Projection}.
+
+\end{itemize}
+
+\begin{figure}[!h]
+	\centering
+		\includegraphics[width=1.0\textwidth]{measModelOverview}
+	\caption{Measurement Model Overview. }
+	\label{fig:measModelOverview}
+\end{figure}
+
+\noindent For all variables considered in the remainder of this chapter, there is no reference to timestep or position estimate indices, as this chapter considers the generation of an expected measurement for a single position estimate at one timestep.
+Key variables are summarized below:
+
+\begin{itemize}
+\item $\mathbf{y}$: The actual measurement (correlation form), as in Sections \ref{framework.Measurement.Measured}, \ref{framework.Measurement.Correlation}.
+\item $\tilde{\mathbf{y}}$: The expected measurement (correlation form), as in Sections \ref{framework.Measurement.Expected}, \ref{framework.Measurement.Correlation}.
+\item $v_j$: Terrain point visibility probability for the $j^{\text{th}}$ point in the 2D profile for a given azimuth scan plane.  
+Note that this probability is for a specific terrain point, not for a pixel in $\tilde{\mathbf{y}}$.
+The visibility probabilities for the pixels in $\tilde{\mathbf{y}}$ are derived from the terrain point probabilities, as detailed in Section \ref{visibility.Projection}.
+%\item $x_j$: Lateral terrain point $j$ position from the sonar transducer along $\hat{\mathbf{x}}_s$ in sonar scan plane (as defined in Section \ref{framework.Frames}).  Note that this quantity should not be confused with $\mathbf{x}$, used to denote the estimated horizontal vehicle position.
+%\item $z_j$: Vertical terrain point $j$ position from the sonar transducer along $\hat{\mathbf{z}}_s$ in the sonar scan plane.
+\end{itemize}
+
+\section{Terrain Point Extraction}
+\label{visibility.Terrain}
+
+As a first step in the measurement model process, and for a given position estimate, terrain points are extracted from the stored topography map.
+For each azimuth scan plane of the Correlation Region for the expected measurement (as described in Section \ref{framework.Measurement.Correlation}), a two-dimenstional profile of terrain points is extracted. 
+
+The topography map $m$ is generically a data structure that contains seafloor terrain point positions with respect to the World NED frame as defined in Section \ref{framework.Frames}:
+
+\begin{align}
+\begin{split}
+m = \{ \textbf{m}_i, \hdots, \textbf{m}_M\}, \text{where} \hspace{1ex} \textbf{m}_i = \begin{bmatrix} m_N, & m_E, & m_Z \end{bmatrix}^{T}
+\end{split}
+\end{align}
+
+\noindent Specifically for the digital elevation maps (DEMs) used for this work, the map is a 2-D matrix of terrain depth values over an evenly-spaced Northings-Eastings grid.
+
+The sonar scan plane is defined in terms of the basis vectors of the Sonar frame, as defined in Section \ref{framework.Frames}, and can be expressed in World frame coordinates as:
+
+\begin{align}
+\begin{split}
+\hat{\mathbf{x}}_s &\equiv \text{Scan plane local lateral vector} \\
+&= ^{W}\hspace{-1ex}R^{V}(\phi, \theta, \psi) ^{V}\hspace{-0.4ex}R_Z^{S} (\psi_a)\begin{bmatrix} 1 & 0 & 0 \end{bmatrix}^{T} \\ \\
+\hat{\mathbf{z}}_s &\equiv \text{Scan plane local vertical vector} \\
+&= ^{W}\hspace{-1ex}R^{V}(\phi, \theta, \psi) ^{V}\hspace{-0.4ex}R_Z^{S} (\psi_a) \begin{bmatrix} 0 & 0 & 1 \end{bmatrix}^{T} \\ \\
+\hat{\mathbf{y}}_s &\equiv \text{Scan plane normal vector} \\
+&= ^{W}\hspace{-1ex}R^{V}(\phi, \theta, \psi) ^{V}\hspace{-0.4ex}R_Z^{S} (\psi_a) \begin{bmatrix} 0 & 1 & 0 \end{bmatrix}^{T}  \\ \\
+\end{split}
+\label{eq:scanPlane}
+\end{align}
+
+The position and range of a terrain point in the 2-D scan plane profile with respect to the center of the sonar transducer can then be expressed as:
+
+\begin{align}
+\begin{split}
+\mathbf{p}_i &= x_i \hat{\mathbf{x}}_s + z_i \hat{\mathbf{z}}_s \\
+r_i &= || \mathbf{p}_i || = \sqrt{x_i^{2} + z_i^2}
+\end{split}
+\label{eq:posRange}
+\end{align}
+
+There are many computational means of extracting terrain points from the topography map, as detailed in Appendix \ref{ap.Terrain}.  
+Leaving the finer details to Appendix \ref{ap.Terrain}, a 2-D terrain profile, $\mathbb{P}$, may be chosen by ray-tracing \cite{Glassner1989} or by evaluating candidate points over a system of inequalities.  
+In this work, the inequality method is used, as it is well-suited to vectorized operations in a scripting language (e.g. MATLAB or Python):
+
+\begin{align}
+\begin{split}
+&\text{let} \hspace{1ex} \mathbf{x}_3 \equiv \begin{bmatrix} x_N, x_E, x_D \end{bmatrix}^{T}, \tilde{\mathbf{p}}_i \equiv \mathbf{m}_i - \mathbf{x}_3, \textbf{p}_i \equiv \tilde{\mathbf{p}}_i - \tilde{\mathbf{p}}_i^{T} \hat{\mathbf{y}}_s \\
+&\textbf{p}_i \in \mathbb{P} \hspace{1ex} \forall i \hspace{1ex} \text{s.t.} \hspace{1ex} (\hspace{0.5ex} \tilde{\textbf{p}}_i^{T}\hat{\mathbf{y}}_s \leq \tau_n \hspace{0.5ex}) \wedge (\hspace{0.5ex} r_{\text{min}} \leq || \tilde{\mathbf{p}}_i || \leq r_{\text{max}} \hspace{0.5ex}) \hspace{0.5ex} \wedge (\hspace{0.5ex} \tilde{\mathbf{p}}_i^{T}\hat{\mathbf{x}}_s \geq 0 \hspace{0.5ex})
+\end{split}
+\label{eq:extract1}
+\end{align}
+
+\noindent where $\mathbf{x}_3$ is the 3-D vehicle position estimate in the World frame (same frame as map). Threshold $\tau_n$ is chosen in this work to be $0.6\Delta_m$, where $\Delta_m$ is the map resolution ($1m$ for the DEMs used in this work), and ($r_{\text{min}}, r_{\text{max}}$) are specified according to the Correlation Region as described in Section \ref{framework.Measurement.Correlation}.
+As shown in (\ref{eq:extract1}), the profile $\mathbb{P}$ is formed as the projection onto the sonar scan plane of vectors from the vehicle position, $\mathbf{x}$, to accepted map points, $\mathbf{m}_i$.
+ 
+\section{Projection into Sonar Image Domain}
+\label{visibility.Projection}
+
+The formation of a 2-D terrain point profile, $\mathbb{P}$, for a given azimuth was described in the previous section, and the calculation of a visibility probability, $v_i$, for each terrain point in the profile, $\mathbf{p}_i \in \mathbb{P}$, is presented in the following section.
+In order to be correlated with the actual measurement, as described in Section \ref{framework.Measurement.Measured}, each pixel of the expected measurement, $\tilde{\mathbf{y}}$, must be assigned a visiibility probability.
+This assignment is accomplished though linear interpolation between terrain point visibility probabilities accoring to terrain point ranges.
+
+For each azimuth, $\psi_a$, of the expected measurement, the range pixels are assigned visibility probabilities according to:
+
+\begin{align}
+\begin{split}
+^{\psi_a} \hspace{-0.4ex} \tilde{\mathbf{y}}[u] &= v_i + (\frac{r[u] - r_i}{r_j - r_i})v_j \\
+&\text{for} \\
+^{\psi_a} \hspace{-0.4ex} \tilde{\mathbf{y}}[u] &\equiv \text{expected measurement for azimuth $\psi_a$, pixel} \hspace{1ex} u \\
+r[u] &\equiv \text{range of pixel} \hspace{1ex} u \\
+r_i &\leq r[u] \leq r_j \\
+\end{split}
+\label{eq:linearInterp}
+\end{align}
+
+\noindent where terrain points $i,j$ are the nearest bounding neighbors of pixel $u$ in range.
+The vectors $^{\psi_a} \hspace{-0.4ex} \tilde{\mathbf{y}}$ for each azimuth $\psi_a$ form the rows of the expected measurement.
+
+\section{Terrain Point Visibility Probability}
+\label{visibility.Visibility}
+
+This section details model development for the calculation of terrain point visibility probability.
+The ideal model should adequately capture uncertainty from sensor noise, unmodeled physics, and uncertainty from map noise.   
+Additionally, the model should be as computationally simple as can be in order to allow for reasonable runtime for field operation.
+\\
+
+\noindent This section is organized as follows:
+
+\begin{itemize}
+
+\item \textbf{Section \ref{visibility.Visibility.Modeling}} introduces the terrain point visibility probability modeling problem.
+
+\item \textbf{Section \ref{visibility.Visibility.LOS}} describes a straightforward line-of-sight (LOS) visibility model.
+The LOS model is very much the logical first step toward modeling terrain visibiliites, but accounts for uncertainty with a single parameter, and as such is not a sufficiently rich model. 
+
+\item \textbf{Section \ref{visibility.Visibility.MVN}} presents the richer Multivariate Normal (MVN) model, which models the underlying terrain distribution and map as multivariate normal distributions.  
+The MVN model development arrives at a solution for calculating terrain visibility probabily, but it is computationally intractable.
+
+\item \textbf{Section \ref{visibility.Visibility.DH}} presents the Differential Height (DH) model for terrain visibility probability.
+The DH model is richer than the LOS model in representing uncertainty, and approximates the behavior of the MVN model in simulation (see Section \ref{visibility.Tuning.DHMVNfit}), while imposing negligibly more computational burden than the LOS model.
+
+\end{itemize}
+
+\subsection{Visibility Probability Modeling}
+\label{visibility.Visibility.Modeling}
+
+Terrain visibility probability is the probability that a terrain point $\textbf{p}_i$, as defined in (\ref{eq:posRange}),(\ref{eq:extract1}), is visible to a sonar transducer (i.e. not in acoustic shadow).  As defined in (\ref{eq:posRange}), each point is described by its distance from the sonar transducer along orthogonal axes $\hat{\mathbf{x}}_s, \hat{\mathbf{z}}_s$, specified by coordinates $(x,z)$ as shown in Figure \ref{fig:angles}.
+
+\begin{figure}[!h]
+	\centering
+		\includegraphics[width=0.7\textwidth]{Angles}
+	\caption{Terrain and sonar observer diagram.  Terrain points in green are depths at discrete lateral locations, i.e. a digital elevation map (DEM).  A terrain point is specified by lateral distance $x$ and vertical distance $z$ from the sonar transducer, where elevation angle $\theta = \text{arc tan}(z,x)$. }
+	\label{fig:angles}
+\end{figure}
+
+The condition for occlusion of terrain point $j$ caused by terrain point $i$ is given by:
+
+\begin{equation}
+\frac{z_i}{x_i} < \frac{z_j}{x_j},  \hspace{2ex} \text{where} \hspace{1ex} i < j
+\label{eq:occrel}
+\end{equation}
+
+\noindent where the ratio $\sfrac{z_i}{x_i}$ is related to the angle from the horizontal to the line-of-sight vector from the sonar transducer to terrain point $i$ by the tangent function.  
+%Because the only angles considered range from $0$ to $\pi/2$ radians, the tangent function is monotonic in the ratio $\sfrac{z_i}{x_i}$, and so considering this ratio in lieu of the angle is acceptable.
+
+\subsection{Line-of-Sight (LOS) Model}
+\label{visibility.Visibility.LOS}
+
+A straightforward visibility probability model is based on line-of-sight occlusion, where the visibility probability for terrain point $j$ in the scan plane is given by:
+
+\begin{equation}
+v_j = \left\{ 
+  \begin{array}{l l}
+    \lambda & \quad \text{\textbf{expected} shadow according to (\ref{eq:occrel})}\\
+    1 - \lambda & \quad \text{otherwise}
+  \end{array} \right.
+  \label{eq:detSignal}
+\end{equation}
+
+\noindent where $\lambda$ must be between $0$ and $0.5$.  The only uncertainty allowed for by the Line-of-Sight (LOS) model comes in the form of the $\lambda$ parameter, where increasing $\lambda$ values allow for increasing levels of uncertainty, i.e. each measurement is trusted increasing less.
+
+While the simplicity of the LOS model is attractive, it treats all line-of-sight occlusions equally.  That is, a terrain point that is in shadow by a slight grazing line-of-sight occlusion is treated the same as a terrain point in shadow behind a large boulder.  But, subject to confidence in the map and imaging sonar, the likelihood for each of these terrain points to be in shadow should not be the same.  Sections \ref{visibility.Visibility.MVN} and \ref{visibility.Visibility.DH} present models that more fully use terrain information to model visibility probability.
+
+%\subsection{Terrain Depths as Uncorrelated Normal Variables}
+%\label{sec:uncorr}
+%
+%A na\"{\i}ve approach to terrain modeling is to assume each terrain depth is drawn from a univariate normal distribution $z_i \sim \mathcal{N}(\mu_i, \sigma_i^2)$. With this model the probability that terrain point $j$ is visible, $p_j$, is given by the following relations:
+%
+%\begin{equation}
+%\begin{align*}
+%p_j &= \prod_{i=1}^{j-1}[1 - P(\text{i occ. j})] \\
+%P(\text{i occ. j}) &= \int_{g=-\infty}^{\infty}P(z_j = g)P(z_i < \frac{x_i g}{x_j})dg
+%\label{eq:visProbNorm}
+%\end{align*}
+%\end{equation}
+%
+%This representation of the terrain visibility probability assumes the independence of individual terrain (DEM) depths.  This is problematic, as the occlusion probability is directly affected by the spatial resolution of the map.
+%
+%This problem inherent to an assumption of terrain independence is clear via the following thought experiment.  Assume that the true terrain is flat (constant depth), and the observer is located at the same depth, as shown in Figure \ref{fig:thoughtExp}. Further assume that each sampled terrain point depth is modeled as a normal random variable with its mean at the true flat terrain depth. 
+%
+%\begin{figure}[!h]
+%	\centering
+%	\begin{subfigure}[b]{0.23\textwidth}
+%                \includegraphics[width=\textwidth]{thoughtExp1}
+%                \caption{}
+%  \end{subfigure}
+%  \centering
+%	\begin{subfigure}[b]{0.23\textwidth}
+%                \includegraphics[width=\textwidth]{thoughtExp2}
+%                \caption{}
+%  \end{subfigure}
+%	\caption{\small Thought experiment diagram for the case that the modeling of terrain depths as uncorrelated is problematic.  (a) 2-point terrain sampling of flat terrain. (b) 3-point terrain sampling of flat terrain.}	
+%	\label{fig:thoughtExp}
+%\end{figure}
+%
+%\noindent  Given these assumptions, the visibility probability of the rightmost point in the left plot of Figure \ref{fig:thoughtExp} is \sfrac{1}{2} according to Equation \ref{eq:visProbNorm}.  Now consider the situation on the right plot of Figure \ref{fig:thoughtExp}, where there is another sampled terrain point between the left and rightmost points.  In this case, according to Equaiton \ref{eq:visProbNorm} the visibility probability of the rightmost point is \sfrac{1}{4}.  However, if indeed the terrain is truly flat, then the terrain is \emph{highly correlated}, and as such the probability of visibility should not have dropped like this according to a higher sample rate. Thus, the correlation between terrain points must be modeled.
+
+\subsection{Multivariate Normal Distribution (MVN) Model}
+\label{visibility.Visibility.MVN}
+
+In this section, a visibility model based on Gaussian assumptions is developed.
+While the model is principled in its design, and under Gaussian assumptions represents the ``right way'' to estimate visibility probabilities, it will be shown that it relies on an evaluation that is computationally intractable.
+\\
+\rule{\textwidth}{1pt}
+
+\noindent \textbf{Modeling Note}: In the model development of this section, care will be given to the distinction between \emph{true} terrain depths and \emph{map} terrain depths.  
+This distinction is important for the mathematical derivation of the model presented in this section, but is not an important distinction in the rest of the thesis.
+
+\noindent \rule{\textwidth}{1pt}
+\\ \\
+In order to properly model terrain visibility under Gaussian assumptions, the correlation between terrain points must be modeled.  If terrain points are modeled as uncorrelated, for example as univariate Gaussian, then the spatial sampling of the map strongly affects visibility probabilities.
+
+This problem inherent to an assumption of terrain independence is clear via the following thought experiment.  Assume that the true terrain is flat (constant depth), and the observer is located at the same depth, as shown in Figure \ref{fig:thoughtExp}. Further assume that each sampled terrain point depth is modeled as a normal random variable with its mean at the true flat terrain depth. 
+
+\begin{figure}[!h]
+	\centering
+	\begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{thoughtExp1}
+                \caption{}
+  \end{subfigure}
+  \hspace{10ex}
+  \centering
+	\begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{thoughtExp2}
+                \caption{}
+  \end{subfigure}
+	\caption{\small Thought experiment diagram for the case that the modeling of terrain depths as uncorrelated is problematic.  (a) 2-point terrain sampling of flat terrain. (b) 3-point terrain sampling of flat terrain.}	
+	\label{fig:thoughtExp}
+\end{figure}
+
+\noindent  Given these assumptions, the visibility probability of the rightmost point in the left plot of Figure \ref{fig:thoughtExp} is \sfrac{1}{2}.  Now consider the situation on the right plot of Figure \ref{fig:thoughtExp}, where there is another sampled terrain point between the left and rightmost points.  In this case, the visibility probability of the rightmost point is \sfrac{1}{4}.  However, if indeed the terrain is truly flat, then the terrain is \emph{highly correlated}, and as such the probability of visibility should not have dropped like this according to a higher sample rate. Thus, the correlation between terrain points must be modeled.
+
+In order to account for correlation between terrain points, true terrain depths $\bar{z}$ may be modeled as random variables drawn from a multivariate normal distribution with known mean and covariance.  This distribution is conditioned on the \emph{map} of terrain depths $\hat{z}$, and is given by:
+
+%\begin{equation}
+\begin{align}
+\begin{split}
+p(\bar{z} | \hat{z}) &= \frac{p(\hat{z}|\bar{z})p(\bar{z})}{p(\hat{z})} = \eta p(\hat{z}|\bar{z})p(\bar{z}) \\
+ &\sim \mathcal{N}(\bar{\mu}, \Sigma) \\
+&\text{for}  \\
+\Sigma &= (\Sigma_{\text{map}}^{-1} + \Sigma_{\text{terrain}}^{-1})^{-1} \\
+\bar{\mu} &= \Sigma(\Sigma_{\text{map}}^{-1}\hat{z} + \Sigma_{\text{terrain}}^{-1}\bar{\alpha})
+\label{eq:terrainMeanCov}
+\end{split}
+\end{align}
+%\end{equation}
+
+\noindent where the terrain prior $p(\bar{z})$ and the map distribution given a terrain $p(\hat{z}|\bar{z})$ are assumed Gaussian as follows:
+
+%\begin{equation}
+\begin{align}
+\begin{split}
+p(\bar{z}) &\sim \mathcal{N}(\bar{\alpha}, \Sigma_{\text{terrain}}) \\
+p(\hat{z}|\bar{z}) &\sim \mathcal{N}(\bar{z}, \Sigma_{\text{map}})
+\label{eq:terrainGaussians}
+\end{split}
+\end{align}
+%\end{equation}
+
+The terrain covariance matrix $\Sigma_{\text{terrain}}$ for the prior terrain distribution $p(\bar{z})$ is estimated using tools common to the spatial data analysis community \cite{Cressie1993}.  It is assumed  that terrain covariance is stationary, i.e. the covariance between two sample points depends solely on the distance $d$ between the points.  This assumption makes the covariance matrix calculable from the covariogram $C(d)$ of the terrain distribution:
+
+%\begin{equation}
+\begin{align}
+\begin{split}
+(\Sigma_{\text{terrain}})_{i,j} &= E[(z_i - \alpha)(z_j - \alpha)] \\
+&\approx C(d), \hspace{2ex} \text{for} \hspace{1ex} d = ||x_i - x_j|| \\
+%&= \frac{1}{N(h)} \sum_{k=1}^{N(h)} [z_iz_{i+h} - \mu^2] \\
+\label{eq:covariogram}
+\end{split}
+\end{align}
+%\end{equation}
+
+\noindent where a common mean value $\alpha$ is assumed for all terrain locations. The covariogram of the terrain may be estimated from a large area terrain map.  
+
+The map covariance matrix $\Sigma_{\text{map}}$ can be estimated according to map error estimates.  For example, if the creator of a digital elevation map (DEM) specified that the standard deviation of each DEM map cell depth is $0.1m$, then under an assumption of uncorrelation between the map errors between cells map points, the diagonal elements of $\Sigma_{\text{map}}$ could be specified as $(\Sigma_{\text{map}})_{i,i} = (0.1m)^2$.
+
+The probability that point $i$ is visible, denoted $v_i$, can then be expressed as:
+
+%\begin{equation}
+\begin{align}
+\begin{split}
+v_i &= P(\frac{z_1}{x_1} > \frac{z_i}{x_i}, \frac{z_2}{x_2} > \frac{z_i}{x_i}, \hdots, \frac{z_{i-1}}{x_{i-1}} > \frac{z_i}{x_i}) \\
+&= P(-z_1 < -\frac{x_1z_i}{x_i}, \hdots, -z_{i-1} < -\frac{x_{i-1}z_i}{x_i}) \\
+&= \int_{z_i^{\star} = -\infty}^\infty \mathrm{F}_{1:i-1}^{\star}(\frac{x_1z_i^{\star}}{x_i^{\star}}, \frac{x_2z_i^{\star}}{x_i}, \hdots, \frac{x_{i-1}z_i^{\star}}{x_i})f_i^{\star}(z_i^{\star})\mathrm{d}z_i^{\star}
+\label{eq:mvn}
+\end{split}
+\end{align}
+%\end{equation}
+
+\noindent where $F^{\star}(z_1^{\star}, z_2^{\star}, \hdots, z_N^{\star})$ is the cumulative distribution function (CDF) for the multivariate gaussian random vector $\bar{z}^{\star} \sim \mathcal{N}(-\bar{\mu}, \Sigma)$, and $F_{1:i-1}^{\star}(z_1^{\star}, \hdots, z_{i-1}^{\star})$ is the CDF of the marginal gaussian random vector for variables $z_1^{\star}, z_2^{\star}, \hdots, z_{i-1}^{\star}$.  The probability density function $f_i^{\star}(z_i^{\star})$ is the marginal distribution for the variable $z_i^{\star}$. 
+\\
+%There are two key problems with practical implementation of this multivariate normal model for estimation of terrain visibility probabilities.  The first, and less prohibitive issue, is that the assumptions of the model, particularly with regard to the assumptions of stationarity and a common mean necessary for covariogram use, may not adequately model the true terrain.  
+%The assumptions of stationarity and a common mean associated with using a covariogram for generation of a terrain covariance matrix can be problematic for real terrain.  Though a covariogram may be estimated from a terrain map, this can lead to a covariogram estimate that is not truly indicative of underlying correlations, but a peculiarity of the map segment used for covariogram analysis.  Furthermore, the model requires an estimate of the map depth distribution given a terrain, i.e. $\Sigma_{\text{map}}$, which is often unknown to users of terrain maps.
+
+\noindent \textbf{Computationally Intractable}
+\\
+
+Practical implementation of the multivariate normal model is computational intractable. 
+The use of Equation \ref{eq:mvn} requires multiple evaluations of a multivariate CDF, which scales in computation time exponentially, as evaluation of the multivariate CDF for four or more dimensions is solved via Monte Carlo techniques \cite{Genz1992}.
+This computational burden makes this method of estimating terrain visibility probabilities intractable for any number of points approaching a realistic map.  
+Hence, there is a need for a simplified model that can approximate the terrain visibility probabilities given by Equation \ref{eq:mvn} with substantially less computational burden.
+
+\subsection{Differential Height (DH) Model}
+\label{visibility.Visibility.DH}
+
+A simplified model is needed for the approximation of terrain visibility probabilities without the prohibitive computational burden of the multivariate normal model. Toward this goal, a metric termed ``differential height" is introduced. The differential height value for terrain point $m$, $\delta z_m$, reflects how occluded or visible the terrain point is.  
+Specifically, the differential height for terrain point $m$ is the distance that $m$ is above or below its occluding line-of-sight, where the occluding line-of-sight is from the transducer to the terrain point $j$ that most occludes $m$ in the scan plane. This is illustrated in Figure \ref{fig:diffHeightsDiagram}.
+
+\begin{figure} [!h]
+	\centering
+	\begin{subfigure}[b]{0.44\textwidth}
+                \includegraphics[width=\textwidth]{diffHeightsDiagram}
+                \caption{}
+                \label{fig:diffHeightsDiagram}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.52\textwidth}
+                \includegraphics[width=\textwidth]{sigmoid_3MLE}
+		\caption{}
+		\label{fig:sigmoid1}
+  	\end{subfigure}
+	\caption{(a) Differential height diagram. Shown is the differential height $\delta z_m$ of a visible terrain point $m$ above the occluding line-of-sight from terrain point $j$.  Terrain points are shown in green. (b) Sigmoid function given by Equation \ref{eq:sigmoid} that translates differential height values into visibility probabilities, with parameters $\kappa = 0.5, \lambda = 0.4, \mu = -0.2m, \gamma = 0.3m$}
+\end{figure}
+
+If terrain point $m$ is occluded according to line-of-sight from the sonar transducer, $\delta z_m$ is negative.  Similarly, if the point is visible according to line-of-sight, $\delta z_m$ is positive.
+Equation \ref{eq:dh} provides the definition of differential height.  
+
+\begin{equation}
+\delta z_m =  \underset{j}{\text{min}} \hspace{1ex} ( x_m \frac{z_j}{x_j} - z_m ) , \hspace{3ex} \forall j = 1, 2, \hdots, m-1
+\label{eq:dh}
+\end{equation}
+
+The differential height (DH) model can be viewed as a ``one-point" approximation to the MVN model for visibility probability, where the visibility probability in the DH model is estimated according to the most occluding point.  This assumes that the true underlying visibility probability for a given terrain point can be adequately estimated solely by a metric derived from its height relation to its most occluding point, rather than with respect to all of the preceding terrain points in the terrain profile (as the MVN assumes).
+
+A linear-time algorithm for calculation of differential height values for each terrain profile is given below.
+Using this $\mathcal{O}(n)$ algorithm in place of a naive $\mathcal{O}(n^2)$ is important for computational speed.
+
+\begin{algorithm}
+\caption{Differential Height Calculation}
+\begin{algorithmic}
+\State \textbf{Input: } Terrain profile lateral vector $x$, depth vector $z$, and angle vector $\theta$ (see Figure \ref{fig:diffHeightsDiagram} for parameter definitions)
+\State \textbf{Output: } Differential height vector $\delta$
+\State \textbf{Initialize: } 
+\State $\theta_{\text{min}} = \theta[1]$
+\State $\alpha \gets \text{tan}(\theta[1]) $
+\State $N \gets \text{length}(\textbf{x}) $ 
+\\
+\For {$i = 2 \to N$}
+\State $\delta[i] = \alpha x[i] - z[i]$
+\If { $\theta[i] < \theta_{\text{min}}$ } 
+\State $\theta_{\text{min}} \gets \theta[i]$
+\State $\alpha \gets \text{tan}(\theta[i])$
+\EndIf
+\EndFor
+\end{algorithmic}
+\label{alg:dh}
+\end{algorithm}
+
+In order to translate differential heights into visibility probabilities, differential height values are passed through a sigmoid function.  The choice of sigmoid function is borrowed from the logistic regression literature, where the parameters of a sigmoid function are fit to continuous feature data (ranging across the real domain) in order to estimate the probability of binary assignment outputs \cite{Freedman2009}.  Indeed, the problem of fitting visibility probability outputs using differential heights features could be formulated as a logistic regression.  The functional justification of the sigmoid is based in the desire for low visibility probability for low DH values, high visibility probability for high DH values, and a smooth transition region.  There are many sigmoid functions from which to choose, including the logistic function $y(z) = e^{-z}(1 + e^{-z})^{-1}$. 
+
+In this work, the following sigmoid function representation is chosen for its computational simplicity and intuitive effects of parameter values on sigmoid shape:
+
+\begin{equation}
+v_m =  \kappa + \lambda \frac{\delta z_m - \mu}{\sqrt{\gamma^2 + (\delta z_m - \mu)^2}} 
+\label{eq:sigmoid}
+\end{equation}
+
+\noindent where $v_m$ is visibility probability for terrain point $m$. Parameter $\mu$ shifts the mean differential height (left/right), $\kappa$ biases the sigmoid symmetrical probability (up/down), $\lambda$ adjusts the sigmoid width in probability (up/down), and $\gamma$ adjusts the width of the sigmoid transition region from low probability to high probability (left/right). 
+Figure \ref{fig:sigmoid1} shows the sigmoid given by Equation \ref{eq:sigmoid} for $\kappa = 0.5, \lambda = 0.4, \mu = -0.2m, \gamma = 0.3m$.
+
+Figure \ref{fig:sigVariation} presents the effects of free parameter variations on sigmoid shape.
+Shifting the mean allows for the observed behavior that expected shadows are overly predicted by pure line-of-sight when compared to measured shadows.  Lower $\lambda$ values limit the effect of differential height variation on visibility probability, which is a means of preventing filter overconfidence, as detailed in \cite{Thrun2005}. Larger $\gamma$ values widen the transition region from low probability to high probability, allowing for a more smooth transition over differential height values in the transition region. 
+Finally, parameter $\kappa$ is either set at $\frac{1}{2}$ or is fit to another value.  Proscribing the value of $\kappa = \frac{1}{2}$ makes the sigmoid function symmetrical in probability, i.e. symmetrical vertically.  In this work, when $\kappa$ is set to $\frac{1}{2}$ the model will be referred to as a ``3-parameter DH model'', and otherwise will be referred to as a ``4-parameter DH model''.
+
+\begin{figure} [!h]
+	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{sigKappaVariation}
+                \caption{$\kappa$-variation}
+                \label{}
+	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{sigLambdaVariation}
+		\caption{$\lambda$-variation}
+		\label{}
+  	\end{subfigure}
+  	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{sigMuVariation}
+		\caption{$\mu$-variation}
+		\label{}
+  	\end{subfigure}
+  	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{sigGammaVariation}
+		\caption{$\gamma$-variation}
+		\label{}
+  	\end{subfigure}
+	\caption{DH model free parameter variational effects on sigmoid shape.}
+	\label{fig:sigVariation}
+\end{figure}
+
+\section{Model Parameter Fitting}
+\label{visibility.Tuning}
+
+The Differential Height (DH) model for terrain visibility probability is desirable for its computational simplicity.  
+Section \ref{visibility.Tuning.DHMVNfit} presents simulation results that show that the DH model can adequately approximate the Multivariate Normal (MVN) model for visibility probability.  
+Section \ref{visibility.Tuning.DHExpFit} presents a method to fit DH model parameters to experimental visibility probabilities.
+
+\subsection{Model Parameter Fitting for Simulated Terrain}
+\label{visibility.Tuning.DHMVNfit}
+
+To examine the behavior of the DH model, and determine if it is descriptive enough to adequately approximate the multivariate normal distribution (MVN) model, its estimation of visibility probabilities was compared to that of the MVN model with simulated terrain profiles. 
+
+Each simulated profile was a 20-point linear terrain profile $\bar{z}$ sampled from the distribution $\mathcal{N}(\bar{\alpha}, \Sigma_{\text{terrain}})$, where the terrain prior mean $\bar{\alpha}$ was a vector of equal depth values $\alpha$, and the values in $\Sigma_{\text{terrain}}$ were given by (\ref{eq:covariogram}) using a covariogram given by the following exponential model commonly employed in spatial data analysis:
+
+\begin{equation}
+C(h) = \left\{ 
+  \begin{array}{l l}
+    s & \quad h = 0\\
+    (s-a)\text{exp}(-\frac{3h}{r}) & \quad h > 0
+  \end{array} \right.
+  \label{eq:covariogram}
+\end{equation}
+
+\noindent where $s$ is called the ``sill" by convention in the spatial analysis literature, $a$ is the ``nugget" which specifies a discontinuous drop in covariance at $h = 0$,  and $r$ is a specified parameter that describes the level of correlation between terrain points.
+The terrain map $\hat{z}$ was drawn from the distribution $\mathcal{N}(\bar{z}, \Sigma_{\text{map}})$.  The map covariance matrix was specified as diagonal $\Sigma_{\text{map}} = \sigma_{map}^2 I_{20x20}$.
+
+In total, 500 20-point terrain/map profiles were simulated.  The parameters $\alpha, s, a, r$ and $\sigma_{map}$ were varied across profiles in order to diversify the 500 simulated terrains/maps.  For each terrain/map profile $i$, MVN model visibility probabilities $P_j^i$ were calculated for each terrain point $j$ according to (\ref{eq:mvn}).  Differential heights $\delta z_j^i$ were calculated for each of the map points.  For a given set of DH sigmoid parameters $(\lambda, \mu, \gamma)$ the DH model visibility probability $\hat{P}_j^i$ for profile $i$, point $j$ can be calculated by (\ref{eq:sigmoid}).
+
+The parameters $(\lambda, \mu, \gamma)$ of the DH model were tuned to best fit the MVN probabilities, in a least-squares sense, over the 500 profiles according to the following optimization:
+
+%\begin{equation}
+\begin{align}
+\begin{split}
+\lambda^*, \mu^*, \gamma^* &= \underset{\lambda, \mu, \gamma}{\text{argmin}} \sum_{i=1}^{500} \sum_{j=2}^{20} (P_j^{i} - \hat{P}(\lambda, \mu, \gamma)_j^{i})^2 \\
+& \hspace{3ex} \text{subject to} \hspace{3ex} 0 < \lambda < \frac{1}{2}
+\label{eq:optSim}
+\end{split}
+\end{align}
+%\end{equation}
+
+\noindent The optimization yielded values $\lambda^* = 0.5, \mu^* = -0.1m, \gamma^* = 0.2m$.  
+The solution of $\lambda^* = 0.5$ makes intuitive sense, as there is no modeling of sensor noise here, and the role of $\lambda$ is to account for uncertainty from sensor noise and unmodeled effects. Figure \ref{fig:TerrainProb_MVNDH} shows the results of the DH model fit for all 500 simulated 20-point terrain/map profiles. 
+
+\begin{figure}[!h]
+	\centering
+	\begin{subfigure}[b]{0.4\textwidth}
+		\includegraphics[width=\textwidth]{TerrainProb1D_Fit_Set2}
+		\caption{}
+		\label{fig:TerrainProb_MVNDH}
+	\end{subfigure}
+	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+		\includegraphics[width=\textwidth]{TerrainFitSet2_251}
+		\caption{}
+		\label{fig:TerrainProb_251}
+	\end{subfigure}
+	\caption{(a) DH model fit to MVN model visibility probabilities for 500 simulated 20-point terrain profiles. MVN probabilities are red, DH model fitted probabilities are blue. (b) Terrain map, differential heights, and visibility probabilities for the profile with the median residual error from (\ref{eq:optSim}).  \emph{Top} Map from sonar transducer (sonar at zero depth, zero lateral). \emph{Middle} Differential heights. \emph{Bottom} Visibility probabilities for the MVN (red) and DH (blue) models. }
+\end{figure}
+
+Figure \ref{fig:TerrainProb_251} provides the DH model fit to MVN probabilities for the 20-point terrain profile with the median residual error from the optimization given by (\ref{eq:optSim}).  The middle plot of Figure \ref{fig:TerrainProb_251} shows the differential height values for the map points, where negative values reflect points that are occluded according to deterministic line-of-sight in the map.  The bottom plot shows the MVN probabilities in red and the DH probabilities in blue.  The close alignment of the probabilities shows that the DH model is sufficiently descriptive to closely describe the probabilities given by the MVN model for this terrain profile, while demanding significantly less computation.
+
+%\subsection{DH Model Parameter Fit with ROV Imaging Sonar Field Data}
+%\label{visibility.DHexpFit}
+%
+%The differential height model fit to the MVN model probabilities shown in Section \ref{sec:DHMVNfit} is a good theoretical step, but the ultimate use of such a model is for real-world position localization.  As such, the DH visibility probability model should best fit the visibility probability distribution for real data.  For the case of underwater localization using imaging sonar, given ``true" vehicle locations with respect to underwater terrain maps the DH model can be fit to measured visibility probabilities, which means fitting the parameters of the sigmoid function given by (\ref{eq:sigmoid}) that translates differential heights into visibility probabilities.
+%
+%\begin{figure}[!h]
+%	\centering
+%		\includegraphics[width=0.7\textwidth]{bootstrap}
+%	\caption{Bootstrapping Method for DH model parameter fit. }
+%	\label{fig:bootstrap}
+%\end{figure}
+%
+%Three ROV datasets were collected in the Monterey Bay, in collaboration with the Monterey Bay Aquarium Research Institute (MBARI), used for the tuning of DH model parameters.  This dataset will be referred to as the ``training'' set.  The ROVs were outfitted with a Kongsberg mechanically-scanned imaging sonar located on top of the vehicle, as shown in Figure \ref{fig:DocRicketts}.  The sonar images obtained have a maximum range of 100m.  ROV attitude was measured by a fiber-optic gyro, and altitude was measured by an altimeter. A 1m-resolution DEM was used as the bathymetry map.
+%
+%Dataset 1 captures the imaging of a large boulder in a crater surrounded by flat terrain at a deep site (roughly 2900m depth). 
+%Dataset 2 was collected at shallower depth (86m) in Portuguese Ledge in the Monterey Bay, which is a terrain region with varied topography.  
+%Dataset 3 was collected in an area with sand ripples at a deep site near the Dataset 1 location (roughly 2900m depth).  For each dataset, a scanning sonar image was collected while the ROV remained motionless.  
+%
+%\begin{figure}[!h]
+%	\centering
+%		\includegraphics[width=0.45\textwidth]{DocRicketts}
+%	\caption{MBARI DocRicketts ROV with a Kongsberg mechanically-scanned imaging sonar circled in red.  Image courtesy of mbari.org.}
+%	\label{fig:DocRicketts}
+%\end{figure}
+%
+%Unfortunately, there was no truth data for these underwater datasets, and subsequently obtaining maximum likelihood estimate (MLE) ROV positions using the Point Mass Filter was necessary for the DH model parameter fitting; that is, the MLE positions served as assumed ``truth'' positions. Using Equations \ref{eq:dh}, \ref{eq:sigmoid} for terrain visibility probabilities, the MLE vehicle seafloor-relative position was obtained for each of the three sonar imagery datasets.  Initial values of the sigmoid parameters were iterated until stable MLE positions were found, i.e. the process began with hand-tuned parameters.  The differential height values of ensonified terrain about these three MLE positions, along with measured visibility probabilities from the three sonar images, were then used as input to an optimization for sigmoid model parameter estimation.  Hence, the parameter identification and MLE estimation were not uncorrelated. There is some circularity in the parameter identification.  
+
+\subsection{Parameter Fitting Method for Field Data}
+\label{visibility.Tuning.DHExpFit}
+
+The differential height model fit to the MVN model probabilities shown in Section \ref{visibility.Tuning.DHMVNfit} is a good theoretical step, but the ultimate use of the DH model is for real-world position localization.  As such, the DH visibility probability model should best fit the visibility probability distribution for real data.  For the case of underwater localization using imaging sonar, given true vehicle locations with respect to underwater terrain maps the DH model can be fit to measured visibility probabilities, which means fitting the parameters of the sigmoid function given by (\ref{eq:sigmoid}) that translates differential heights into visibility probabilities.
+
+The three parameters of the DH model described in Section \ref{visibility.Visibility.DH} can be estimated to maximize the alignment of measured visibility probabilities with expected/modeled visibility probabilities.
+In order to do so, a set of measured visibility images must be selected.
+Further, expected differential height images corresponding the measured images must be generated.
+The set of measured visibility images and expected differential height images comprise the \emph{training set}.
+
+The top images in Figure \ref{fig:dhTrainingSet} are training set measured sonar imagery, thresheld on intensity to yield white pixels (visible) and black pixels (shadow).  
+The bottom images are the training set differential height images for the corresponding locations, where tending toward red indicates higher visibility differential height (more positive), and blue indicates lower visibility differential height (more negative).  
+%The large, dark blue regions in the lower parts of the MLE images indicate non-correlation regions, where the differential height values are masked-out in order to prevent consideration of ``false" shadows not caused by terrain. The alignment of the measured shadow regions in the left plots of Figure \ref{fig:measMLE3} with lower DH values (yellow to green and blue) on the right plots, especially evident in the top two datasets, indicates that these MLE positions are indeed near the true vehicle locations.
+
+%\begin{figure}[!h]
+%	\centering
+%		\includegraphics[width=0.7\textwidth]{measMLE3_linear}
+%	\caption{Training set measured sonar shadow imagery and MLE differential height images.  (Top row) Measured sonar imagery, thresheld on intensity to yield white pixels (visible) and black pixels (shadow). (Bottom row)  differential height images for the corresponding MLE locations, where tending toward red indicates higher visibility differential height (more positive), and blue indicates lower visibility differential height (more negative).}
+%	\label{fig:measMLE3}
+%\end{figure}
+
+\begin{figure}[!h]
+	\centering
+	\begin{subfigure}[b]{0.365\textwidth}
+		\includegraphics[width=\textwidth]{meas_shadows_561_3_ver2_CORRIMAGE}
+		\caption{}
+	\end{subfigure}
+	\centering
+	\begin{subfigure}[b]{0.224\textwidth}
+		\includegraphics[width=\textwidth]{meas_shadows_559_5_CORRIMAGE}
+		\caption{}
+	\end{subfigure}
+	\centering
+	\begin{subfigure}[b]{0.365\textwidth}
+		\includegraphics[width=\textwidth]{meas_shadows_562_5_CORRIMAGE}
+		\caption{}
+	\end{subfigure}
+	
+	\centering
+	\begin{subfigure}[b]{0.365\textwidth}
+		\includegraphics[width=\textwidth]{rdh_561_3_CORRIMAGE}
+		\caption{}
+	\end{subfigure}
+	\centering
+	\begin{subfigure}[b]{0.224\textwidth}
+		\includegraphics[width=\textwidth]{rdh_559_5_CORRIMAGE}
+		\caption{}
+	\end{subfigure}
+	\centering
+	\begin{subfigure}[b]{0.365\textwidth}
+		\includegraphics[width=\textwidth]{rdh_562_5_CORRIMAGE}
+		\caption{}
+	\end{subfigure}
+	
+	\caption{\textbf{Training Set:} Measured sonar visibility images and expected differential height images.  (Top row, (a)-(c)) Measured visibility imagery, thresheld on intensity to yield white pixels (visible) and black pixels (shadow). (Bottom row, (d)-(f)) Expected differential height images, where tending toward red indicates higher visibility differential height (more positive), and blue indicates lower visibility differential height (more negative).}
+	\label{fig:dhTrainingSet}
+\end{figure}
+
+In order to carry out the sigmoid parameter optimization, measured and modeled visibility probabilities were calculated as a function of differential height.  First, differential height values between a minimum value, $\delta_{\text{min}}$, and a maximum value, $\delta_{\text{max}}$, were divided into $N$ total bins. For each differential height value in the three MLE differential height images its corresponding DH bin was found, and then the corresponding pixel value in the measured image found.  If the pixel was visible (white), then the bin count total and the measured count total for the DH bin were updated, otherwise for a shadow pixel (black) only the bin count total was updated, as depicted in Figure \ref{fig:binCartoon}.
+
+\begin{figure}[!h]
+	\centering
+		\includegraphics[width=0.7\textwidth]{binCartoon}
+	\caption{Illustration of measured visibility probability calculation by differential height binning.  Shadow pixels (black) and visible pixel (white) for a given measured sonar shadow image are added to the differential height bin for the corresponding MLE differential height image. }
+	\label{fig:binCartoon}
+\end{figure}
+
+The measured visibility probability for the DH value for bin $i$, $P^i$, and the modeled visibility probability for DH bin $i$ as a function of the sigmoid parameters $(\lambda, \mu, \gamma)$, $\hat{P}^i$, are then calculated by:
+
+%\begin{equation}
+\begin{align}
+\begin{split}
+P^i &\equiv \text{measured visibility probability for DH bin i} \\
+&= \frac{\text{\# Measured visible pixels for DH bin i}}{ \text{\# Measured pixels for DH bin i}} \\
+\\
+\hat{P}(\kappa, \lambda, \mu, \gamma)^i &\equiv \text{modeled visibility probability for DH bin i} \\
+&= \kappa + \lambda \frac{\delta z^{i} - \mu}{\sqrt{\gamma^2 + (\delta z^{i} - \mu)^2}} 
+\label{eq:measMLEprobs}
+\end{split}
+\end{align}
+%\end{equation}
+
+The 4-parameter DH sigmoid parameter estimation is then formulated as a weighted least-squares optimization:
+
+%\begin{equation}
+\begin{align}
+\begin{split} 
+\kappa^*, \lambda^*, \mu^*, \gamma^* &= \underset{\lambda, \mu, \gamma}{\text{argmin}} \sum_{i=1}^{N} \beta^i (P^{i} - \hat{P}(\kappa, \lambda, \mu, \gamma)^{i})^2 \\
+\text{subject to}& \\
+\kappa - \lambda &> 0 \\
+\kappa + \lambda &< 1 \\
+\kappa &> 0 \\
+\lambda &> 0 
+\label{eq:opt}
+\end{split}
+\end{align}
+%\end{equation}
+
+\noindent where the weight $\beta^i$ for each DH bin $i$ is set to be the minimum of its pixel count and a maximum value $Q_{max}$, normalized such that the weights are between 0 and 1:
+
+\begin{equation}
+\beta^{i} = \text{min}\hspace{0.3ex}(1, \frac{\text{\# Measured pixels for DH bin i}}{Q_{max}})
+\label{eq:beta}
+\end{equation}
+
+For the 3-parameter DH sigmoid parameter estimation, where $\kappa = 0.5$ is set \emph{a priori}, the optimization problem reduces to:
+
+\begin{align}
+\begin{split} 
+\lambda^*, \mu^*, \gamma^* &= \underset{\lambda, \mu, \gamma}{\text{argmin}} \sum_{i=1}^{N} \beta^i (P^{i} - \hat{P}(\kappa = 0.5, \lambda, \mu, \gamma)^{i})^2 \\
+\text{subject to}& \\
+0 &< \lambda < \frac{1}{2}
+\label{eq:opt3}
+\end{split}
+\end{align}  
+
+In summary, the following constants must be chosen in order to conduct the DH model parameter optimization:
+
+\begin{itemize}
+\item \textbf{$\delta_{\text{min}}, \delta_{\text{max}}$}: Minimum and maximum differential height values, respectively, considered in the parameter optimization.
+\item \textbf{$N$}: Total number of differential height bins between $\delta_{\text{min}}$ and $\delta_{\text{max}}$.
+\item \textbf{$Q_{\text{max}}$}: Number of differential height observations in the training data for a given differential height bin such that the bin is maximally weighted according to Equation \ref{eq:beta}. 
+\end{itemize}

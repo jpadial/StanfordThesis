@@ -1,0 +1,1126 @@
+% !TEX root = ../thesis.tex
+
+\chapter{Localization Framework}
+\label{ch.Framework}
+
+This thesis introduces a new way to use sonar imagery for position localization with respect to a seafloor topography map.
+Specifically, acoustic shadows in sonar imagery are used as the measurement, due to the primarily geometric nature of acoustic shadows, as discussed in Section \ref{sonar.Shadows}.
+
+This chapter describes the localization framework.  
+Figure \ref{fig:frameworkOverview} provides a high-level block diagram of the localization methodology.
+Inputs to the estimator may be separated into: (1) input data (topography map and initialization parameters) that are static, and (2) measurements (measured vehicle kinematic states and imaging sonar measurements) that may be input in batch or sequentially.
+For each block, relevant thesis sections are listed below the block.
+
+\begin{figure}[!h]
+	\centering
+		\includegraphics[width=1.0\textwidth]{FrameworkOverview}
+	\caption{Localization overview block diagram. Input data (map and initialization parameters) and measurements are inputs to the Bayesian estimator.  The output of the Bayesian estimator is map-relative horizontal position.}
+	\label{fig:frameworkOverview}
+\end{figure}
+
+There are two primary usage cases for which the localization methodology presented in this chapter applies:
+
+\begin{itemize}
+\item \textbf{Motionless Case}: For use with ROVs or hover-capable AUVs.  A single sonar image is measured while the vehicle remains motionless, and the vehicle map-relative position is estimated in a batch likelihood estimator (Section \ref{framework.Motionless}).
+\item \textbf{Motion Case}: For use with typical AUV applications. Sonar image measurements are made as the vehicle moves over terrain, and the vehicle map-relative position is estimated in a recursive Bayesian estimator (Section \ref{framework.PMF}).
+\end{itemize}
+
+\noindent Figure \ref{fig:frameworks} provides block diagrams for each of the two usage cases.
+The figure expands the Bayesian estimator block from Figure \ref{fig:frameworkOverview} for each case.
+The important aspects of Figure \ref{fig:frameworks} are:
+
+\begin{itemize}
+\item \textbf{Similarity - Measurement Likelihood}: The measurement likelihood block is shared and identical between the two usage cases, and is detailed in Section \ref{framework.Measurement}.
+The measurement likelihood quantifies how likely the measurements are for a given position estimate.
+The calculation of measurement likelihood using imaging sonar measurements is a key contribution of this thesis. 
+\item \textbf{Difference - Time Update}: At a high-level, the only difference between the two usage cases is the necessity of a time update in the Motion case.
+All other inputs/outputs for the two usage cases are identical.
+\end{itemize}
+
+\noindent In this chapter, separate estimator designs are presented for each usage case.
+This separation best enables a reader of this work to implement an estimator design for his or her application of interest.
+However, as shown in Figure \ref{fig:frameworks}, the only fundamental difference between the two estimators is the existence of a time update.
+
+\begin{figure}[!h]
+	\centering
+	\begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{FrameworkMotionless}
+                \caption{Motionless}
+                \label{fig:frameworkMotionless1}
+  	\end{subfigure}
+  	\hspace{4ex}
+  	\centering
+	\begin{subfigure}[b]{0.5\textwidth}
+                \includegraphics[width=\textwidth]{FrameworkMotion}
+                \caption{Motion}
+                \label{fig:frameworkMotion1}
+  	\end{subfigure}
+	\caption{Localization frameworks for the Motionless and Motion cases. }	
+	\label{fig:frameworks}
+\end{figure}
+
+\noindent \textbf{Chapter Roadmap}:  
+
+\begin{itemize}
+
+\item \textbf{Section \ref{framework.Frames} Kinematic States and Reference Frames}:  Estimated and measured vehicle kinematic states are described, along with the representation of underwater position, and frames of reference. 
+
+\item \textbf{Section \ref{framework.Topography} Topography Map}: Underwater topography maps, necessary for measurement likelihood calculation, are described in this section.
+
+\item \textbf{Section \ref{framework.Bayesian} Bayesian Estimation}: An overview of Bayesian estimation, with specific applicability to the underwater localization problem, is presented. 
+The concepts of prior and posterior distributions and measurement likelihood are introduced.
+
+\item \textbf{Section \ref{framework.Measurement} Measurement Likelihood}: A measurement likelihood function for the use of acoustic shadows in sonar imagery is a major contribution of this work, and is introduced in this section.
+The likelihood function is usable for any Bayesian estimator that does not require a linearized measurement model, and is used in estimator designs presented for the Motionless and Motion usage cases.
+The calculation of expected measurements through a visibility measurement model, which is necessary for evaluation of the measurement likelihood, is left to Chapter \ref{ch.MeasurementModel}.
+
+\item \textbf{Section \ref{framework.Motionless} Motionless Case: Batch Likelihood Estimator}: A multi-resolution batch likelihood estimator design is presented for the case where the underwater vehicle is motionless during sonar image measurement.  
+The motionless case is applicable to ROV operations and to hover-capable AUV operations.
+
+\item \textbf{Section \ref{framework.PMF} Motion Case: Point Mass Filter (PMF)}: This section describes a Point Mass Filter (PMF) estimator for the case with vehicle motion, where sonar measurements are collected as the vehicle moves (generally applicable to AUV operations).
+
+\item \textbf{Section \ref{framework.Statistics} Estimator Statistics}: Estimator summary statistics and tools for automatic analyses of results are presented.  
+In particular, these summary statistics are useful for assessing estimator confidence and the chance that the estimator has converged to a false position estimate.
+
+\end{itemize}
+
+\section{Kinematic States and Reference Frames}
+\label{framework.Frames}
+
+This work enables map-relative, 2-DOF horizontal position estimation for underwater vehicles using sonar imagery.  As such, horizontal position is the estimata state vector.  The four remaining vehicle pose states (vertical position and 3-DOF attitude/orientation) are treated as measured quantities.
+
+Vertical position is measured both in an absolute and in a terrain-relative sense.
+Pressure sensors accurately measure absolute depth relative to the water surface.
+Altitude, as measured directly by an altimeter or by using the ranges of the four beams of a DVL, provides a map-relative vertical position.
+
+Vehicle attitude is similarly treated as a measured quantity.
+Attitude may be measured by an IMU, AHRS, or INS, as discussed in Section \ref{intro.Existing.Dead}.
+
+Table \ref{tab:states} summarizes vehicle pose state symbols, physical description, and method of calculation for this work (estimated or measured).
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{Symbol} & \textbf{Quantity} & \textbf{Calculation} \\ \hline
+$x_E$ & Eastings horizontal position & Estimated \\ \hline
+$x_N$ & Nortings horizontal position & Estimated \\ \hline
+$x_D$ & Depth & Measured \\ \hline
+$x_A$ & Altitude & Measured \\ \hline
+$\phi$ & Roll & Measured \\ \hline 
+$\theta$ & Pitch  & Measured \\ \hline
+$\psi$ & Yaw/Heading & Measured \\ \hline
+\end{tabular}
+\caption{Table of vehicle states. 2-D horizontal position is the estimated state vector. Vertical position is measured in absolute terms as depth, and in map-relative terms as altitude. 3-DOF attitude, expressed as Euler angles roll, pitch, and yaw, is measured by an IMU, AHRS, or INS.}
+\label{tab:states}
+\end{table}
+
+Horizontal position on the Earth is generally expressed in one of two ways: (1) as latitude and longitude expressed in angular units (e.g. degrees), or (2) as Northings and Eastings in a projected Cartesian coordinate system, expressed as metric distances.
+The representation of position in longitude and latitude has the advantage that it is a true representation of position on the Earth, but has the disadvantage that these quantities are in angular units.
+Representing translational quantities in terms of angular differences is awkward.
+
+Projected coordinate systems represent position as local East (Eastings) and local North (Northings) distances relative to a horizontal datum, usually expressed in meters. 
+A common projected coordinate system is the Universal Transverse Mercator coordinate system (UTM), which subdivides the Earth into unique zones that are $6^{o}$ wide in longitude and $8^{o}$ wide in latitude, with a local Eastings/Northings Cartesian grid for each zone, as shown in Figure \ref{fig:UTM}.
+A thorough treatment of projected coordinate systems is found in \cite{Chang2006}.
+
+\begin{figure}[!h]
+	\centering
+		\includegraphics[width=0.8\textwidth]{Utm-zones}
+	\caption{The UTM grid. Image by Jan Krymmel. }
+	\label{fig:UTM}
+\end{figure}
+
+In this work, estimated map-relative horizontal positions will be represented as local Northings and Eastings Cartesian coordinates relative to a latitude/longitude datum.  
+The datum will typically be the best \emph{a priori} vehicle position estimate.
+In the context of AUV operations, this datum is typically supplied by the integrated position estimate from an INS.
+In the context of ROV operaitons, this datum is typically supplied by a USBL system, as described in Section \ref{intro.Existing.Acoustic.USBL}.
+
+Three right-handed Cartesian frames of reference are used in this work: World ($W$), Vehicle ($V$), and Sonar ($S$), as shown in Figure \ref{fig:frames}.
+The World frame is an inertial Northings-Eastings-Down (NED) frame.
+The Vehicle frame rotates with the underwater vehicle, where the vehicle x-axis is forward and the vehicle y-axis is starboard.
+The rotation matrix that transforms vectors expressed in the Vehicle frame into a World frame representation is $^{W}\hspace{-0.8ex}R^{V}(\phi, \theta, \psi)$, which is a function of the vehicle roll, pitch, and yaw Euler angles (as defined in Table \ref{tab:states}).
+The origin of the Vehicle frame in this work is the center of the imaging sonar transducer.
+The Sonar frame shares its origin and z-axis with the Vehicle frame.
+For a mechanically-scanned or imaging multibeam sonar, the Sonar frame rotates about its z-axis according to the sonar transducer azimuth angle $\psi_a$.
+For a sidescan sonar, the Sonar frame is either aligned with the Vehicle frame (starboard sonar transducer), or is rotated $180^{o}$ about the z-axis (port sonar transducer).
+
+\begin{figure}[!h]
+	\centering
+		\includegraphics[width=0.8\textwidth]{Frames1}
+	\caption{Cartesian frames of reference. (Left) The World frame, $W$, is related to the Vehicle frame, $V$, by the rotation matrix $^{W}\hspace{-0.8ex}R^{V}$. (Right) The Sonar frame, $S$, rotates about the z-axis it shares with $V$ by the azimuth angle $\psi_a$.}
+	\label{fig:frames}
+\end{figure}
+
+\section{Topography Map}
+\label{framework.Topography}
+
+The most common form of underwater topography map is the Digital Elevation Map (DEM).  A DEM represents seafloor terrain as discrete depth values at regular Northings-Eastings grid locations.  
+As such, a DEM is often referred to as a ``2.5-D'' map.  
+An example DEM is shown in Figure \ref{fig:topographyDEM}.
+A limitation of the DEM map type is that vertical surfaces and overhangs are not naturally handled. 
+
+Other common map types that can handle these fully 3D terrain features are surface meshes and occupancy grids. 
+Surface meshes, commonly used in computer graphics, represent geometry as a mesh of geometric primitives, usually triangles. 
+In \cite{JohnsonRoberson2010}, 3-D seafloor surface meshes are created using a SLAM method with AUV stereo imagery measurements, with a sample mesh from that work shown in Figure \ref{fig:topographyMesh}.
+Occupancy grids subdivide the mapping space into 3-D boxes, termed ``voxels''.  
+Each voxel of the occupancy grid is assigned a probability of being occupied (between $0$ and $1$), where perfect knowledge that seafloor terrain occupies a given voxel would assign it a value of $1$.
+Octrees are efficient forms of occupancy grids that use non-uniformity of the subdivision for efficiency, keeping large voxels for large unoccupied space, and using higher resolution subdivisions to specify the voxels around surfaces, as depicted graphically in Figure \ref{fig:topographyOctree}.
+An efficient octree map data structure was used for the DepthX \emph{cenote} robotic mapping in central Mexico \cite{Fairfield2007}.
+
+In this work, all topography maps used are DEMs, though the approach presented could work with either surface meshes or occupancy grids.
+
+\begin{figure} [H]	
+  	\centering
+	\begin{subfigure}[b]{0.8\textwidth}
+                \includegraphics[width=\textwidth]{Map_559_5_500m_x_300m_Offsets}
+		\caption{DEM of Portuguese Ledge in the Monterey Bay, CA, USA}
+		\label{fig:topographyDEM}
+  	\end{subfigure}
+  	
+  	\centering
+	\begin{subfigure}[b]{0.63\textwidth}
+                \includegraphics[width=\textwidth]{Johnson-Roberson_Mesh}
+		\caption{Surface mesh from \cite{JohnsonRoberson2010}}
+		\label{fig:topographyMesh}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.33\textwidth}
+                \includegraphics[width=\textwidth]{OctreeFairfield2007}
+		\caption{Octree diagram from \cite{Fairfield2007}}
+		\label{fig:topographyOctree}
+  	\end{subfigure} 	
+	\caption{Topography map type examples.}
+	\label{fig:topographyTypes}
+\end{figure}
+
+\section{Bayesian Estimation}
+\label{framework.Bayesian}
+
+This section will provide a brief introduction to Bayesian state estimation, where a more thorough treatment can be found in \cite{Thrun2005}.
+In Bayesian state estimation, states and measurements are modeled as random variables.
+There are three distributions of interest in Bayesian estimation:
+
+\begin{itemize}
+\item \textbf{Prior} The prior distribution on the state models the probability of states with \emph{prior} knowledge. 
+\item \textbf{Likelihood} The likelihood function, or distribution, is the probability of a measurement given the state.
+\item \textbf{Posterior} The posterior distribution is the probability of the state that has incorporated both prior knowledge (prior distribution) and measurements (through the likelihood function).
+\end{itemize}
+
+The posterior state distribution conditioned on all measurements, $p(\mathbf{s}_k|\mathbb{Y}_k)$, is modeled using Bayes rule:
+
+\begin{align}
+\begin{split}
+p(\textbf{s}_k|\mathbb{Y}_k) &= \frac{p(\mathbf{y}_k | \textbf{s}_k, \mathbb{Y}_{k-1})p(\textbf{s}_k | \mathbb{Y}_{k-1})}{p(\mathbf{y}_k | \mathbb{Y}_{k-1})} \\
+&= \eta p(\mathbf{y}_k | \textbf{s}_k)p(\textbf{s}_k | \mathbb{Y}_{k-1}) \\
+&= \eta p(\mathbf{y}_k | \textbf{s}_k) \int_{\textbf{s}_{k-1}} p(\textbf{s}_k | \textbf{s}_{k-1})p(\textbf{s}_{k-1}|\mathbb{Y}_{k-1}) \\
+\end{split}
+\label{eq:Bayes}
+\end{align}
+
+\noindent where $\mathbf{s}_k$ is the vehicle state vector at timestep $k$, $\mathbf{y}_k$ is the measurement vector at timestep $k$, and $\mathbb{Y}_k$ is the set of measurements from timesteps $1$ through $k$.  The posterior distribution is shown in Equation \ref{eq:Bayes} to be the normalized product of a measurement likelihood $p(\mathbf{y}_k | \mathbf{s}_k)$, and the convolution of a time update $p(\mathbf{s}_k | \mathbf{s}_{k-1})$ and prior state distribution $p(\mathbf{s}_{k-1} | \mathbb{Y}_{k-1})$.
+
+%The second line of Equation \ref{eq:Bayes} is derived from the first line according to: (1) the Markov assumption of state completeness, and (2) the property that the sum of a probability distribution over the entire domain is equal to one.
+%The assumption of state completeness implies that $p(\mathbf{y}_k | \textbf{s}_k, \mathbb{Y}_{k-1}) = p(\mathbf{y}_k | \textbf{s}_k)$, as the current state has all of the information encoded by past measurements.
+%The property of the distribution summing to one allows the replacement of $p(\mathbf{y}_k | \mathbb{Y}_{k-1})$ with a normalization constant $\eta$, as this term does not depend on the state $\textbf{s}_k$. 
+%
+%The third line of Equation \ref{eq:Bayes} shows the factorization of the state posterior distribution as a product of a measurement update, time update, the previous timestep posterior state distribution.  The last term established the recursive nature of Bayesian estimation that allows for incremental state updates.  
+
+Bayesian estimators split state estimation into the product of a measurement update and a time update according to Equation \ref{eq:Bayes}.
+%The measurement update is represented by the first term in Equation \ref{eq:Bayes}, $p(\mathbf{y}_k | \textbf{s}_k)$.
+The measurement update incorporates current/new measurements into the state estimate.
+%The time (or motion) update is represented by the second term in \ref{eq:Bayes}.
+The time update models the transition probability across timesteps.
+Measurement and time updates are derived from system state equations, which can be generically expressed for the underwater localization problem as:
+
+\begin{equation}
+\mathbf{s}_k = g(\mathbf{s}_{k-1}, \mathbf{u}_k, \mathbf{\xi}_k)
+\label{eq:genericMotionEquation}
+\end{equation}
+\begin{equation}
+\mathbf{y}_k = h(\mathbf{s}_k, m, \mathbf{\nu}_k)
+\label{eq:genericMeasurementEquation}
+\end{equation}
+
+\noindent where $\mathbf{u}_k$ is the INS inertial navigation estimate between timesteps $k-1$ and $k$, $\mathbf{\xi}_k$ is motion noise, $m$ is the seafloor terrain map, and $\mathbf{\nu}_k$ is measurement noise. 
+The function $g()$ is known as a \emph{motion model}.  
+The function $h()$ is known as a \emph{measurement model}. 
+%A major contribution of this work is the development of a probabilistic measurement model for the use of sonar imagery for position localization with respect to a topography map, as detailed in Chapter \ref{ch.MeasurementModel}.
+
+Bayesian estimation may be accomplished recursively or in batch.  
+Batch estimation exploits the factorization of Equation \ref{eq:Bayes} to calculate the posterior distribution estimate for all timesteps at once, i.e. in batch.
+Recursive Bayesian estimation exploits the recursive nature of Equation \ref{eq:Bayes} for incremental state estimate updates.
+The canonical Bayesian estimator is the Kalman Filter [CITE KALMAN FILTER].
+Recursive Bayesian estimators update the state estimate through the repeated steps of time and measurement updates. 
+For position localization of an underwater vehicle, these steps are generically summarized below.
+\\ \\
+\textbf{Time Update}. Evaluate $\int_{\textbf{s}_{k-1}} p(\textbf{s}_k | \textbf{s}_{k-1})p(\textbf{s}_{k-1}|\mathbb{Y}_{k-1}) $ by propagating the vehicle translational and rotational motion from timestep $k-1$ to $k$ by the probabilistic motion model $g(\mathbf{s}_{k-1}, \mathbf{u}_k, \mathbf{\xi}_k)$ from Equation \ref{eq:genericMotionEquation}. 
+\\ \\
+\textbf{Measurement Update}. Calculate the posterior distribution $p(\textbf{s}_k|\mathbb{Y}_k)$ for timestep $k$ through the evaluation of the measurement likelihood function $p(\mathbf{y}_k | \mathbf{s}_{k}, m)$, using the measurement model $h(\mathbf{y}_k | \mathbf{s}_k, m)$ from Equation \ref{eq:genericMeasurementEquation}, and normalization to form a valid probability distribution.
+\\ \\
+Bayesian estimators may be classified broadly as either Gaussian or non-parametric.
+Gaussian estimators assume that the posterior state distribution is normally distributed.
+The Kalman Filter and all of its variants (Extended Kalman Filter (EKF), Unscented Kalman Filter (UKF), and Information Filter) are Gaussian estimators.  
+
+Non-parametric Bayesian estimators do not assume a functional form for the posterior state distribution.
+Instead, non-parametric filters populate discrete state estimate samples to model the underlying state distribution.
+Examples of non-parametric filters include Particle Filters (PFs) and Point Mass Filters (PMFs).
+
+A feature of non-parametric state estimation especially useful for underwater navigation is that multi-modal distributions can be estimated, as opposed to Gaussian estimators that enforce a uni-modal normal form in modeling the underlying distribution.
+The self-similarity of seafloor terrain can lead to multi-modal position distributions, which is well-handled by non-parametric estimators.
+An issue with the use of non-parametric state estimation is that they can become computationally burdensome as the size of the state space grows.
+In general, the computational burden of a non-parametric filter grows exponentially in the number of states estimated.
+
+This thesis introduces a measurement likelihood function $p(\mathbf{y}_k | \mathbf{s}_k)$ for imaging sonar acoustic shadows, and this measurement likelihood function can be used with any Bayesian estimator that does not require measurement model linearization.
+Examples of Bayesian estimators that do not require measurement model linearization are sampling-based filters such as Particle Filters and Point Mass Filters, and Gaussian estimators that do not require linearization such as the Unscented Kalman Filter (or Sigma Point Filter).
+The measurement likelihood function is introduced in Section \ref{framework.Measurement}, with the details of the visibility measurement model presented in Chapter \ref{ch.MeasurementModel}.
+
+\section{Measurement Likelihood}
+\label{framework.Measurement}
+
+This section provides an overview of the measurement likelihood function for the use of acoustic shadows in sonar imagery for position localization.
+This measurement likelihood function is usable for any Bayesian estimator that does not require a linearized measurement model.
+Figure \ref{fig:measLikeBlock} provides a block diagram representation of the process by which measurement likelihoods are calculated.
+
+\begin{figure}[!h]
+	\centering
+		\includegraphics[width=0.8\textwidth]{MeasLikelihoodDiagram}
+	\caption{Measurement likelihood calculation block diagram}
+	\label{fig:measLikeBlock}
+\end{figure}
+
+The following sub-sections provide necessary details for the description of the likelihood function:
+
+\begin{itemize}
+\item \textbf{Section \ref{framework.Measurement.Measured}} details the labeling of acoustic shadows in sonar intensity images in order to produce the ``actual measurements'' (visibility images).
+
+\item \textbf{Section \ref{framework.Measurement.Expected}} provides an overview of the expected measurement, where for this work the expected measurement is a probabilistic visibility image in the sonar image domain.
+The details of expected measurement calculation are left to Chapter \ref{ch.MeasurementModel}.
+
+\item \textbf{Section \ref{framework.Measurement.Correlation}} details the mapping from the native sonar image domain into a horizontal range-azimuth domain that is used for correlation, where these correlation form measurements are used in the likelihood function evaluation.
+
+\item \textbf{Section \ref{framework.Measurement.Weighting}} presents the measurement likelihood  function, $p(\mathbf{y}_k | \mathbf{s}_k, m)$, that takes as inputs the actual and expected measurements in correlation form and the topography map.
+
+\end{itemize}
+
+\subsection{Actual Measurements}
+\label{framework.Measurement.Measured}
+
+Acoustic shadows in a measured sonar image are assigned a hard label according to image intensity:
+
+\begin{equation}
+\mathbf{y}_k[u] = \left\{ 
+  \begin{array}{l l}
+    0 & \quad I_k[u] < \tau \hspace{1ex} \text{(\textbf{measured} shadow)}\\
+    1 & \quad \text{otherwise}
+  \end{array} \right.
+  \label{eq:shadowLabels}
+\end{equation}
+
+\noindent where $\mathbf{y}_k$ is the measured visibility image at timestep $k$, $I_k$ is the raw sonar intensity image at timestep k, and $u$ is the linear pixel index in the image.
+In general, the actual measurements are two-dimensional, but will be described with \emph{linear} indexing in this work (two-dimensional indices may always be converted to one-dimensional indices, and vice versa).
+Shadows are labeled according to the thresholding of sonar image intensity, where image pixels below the threshold intensity $\tau$ are labeled as shadow.  
+In this work, the measured visibility image will be referred to as the ``actual measurement''.
+
+Sample visbility images for a mechanically-scanned sonar image and a sidescan sonar image are shown in Figure \ref{fig:shadowLabelingDisplay}.
+The measured visibility images are shown in \emph{display} form, which is not the form used for correlation with expected measurements.
+The correlation form of the visibility image is described in Section \ref{framework.Measurement.Correlation}.
+
+\begin{figure}[!h]
+  	\centering
+	\begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{ms1000_561_3_c_brighter}
+                \caption{}
+         \end{subfigure}
+         \centering
+	\begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{meas_shadows_561_3_ver2}
+                \caption{}
+  	\end{subfigure}
+  	
+  	\centering
+	\begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{sssSample1}
+                \caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{sssSample1_Shadows}
+                \caption{}
+  	\end{subfigure}	  	
+	\caption{Measured shadow labeling in sample sonar images. Note that the visibility images shown are in \emph{display} form.  (a) Measured sonar intensity image collected by a mechanically-scanned imaging sonar. Range is proportional to radius from the image center. (b) The measured visbility image for the scanned sonar image in \emph{display} form.  Shadows are shown as black pixels, visible returns are white. (c) Measured sidescan sonar image.  The horizontal axis of the sidescan sonar image is time of flight (or range) and the vertical axis denotes timesteps. (e) The measured visibility image for sidescan sonar image in \emph{display} form. }	
+	\label{fig:shadowLabelingDisplay}
+\end{figure}
+
+\subsection{Expected Measurement}
+\label{framework.Measurement.Expected}
+
+Bayesian estimation relies on the comparison of actual measurements with expected measurements, where the latter are generated by use of a \emph{measurement model}.  
+The following equation generically describes a measurement model for pose localization with respect to a topography map:
+
+\begin{equation}
+\tilde{\mathbf{y}}_k = h(\mathbf{s}_k, m)
+\label{eq:genericMeasurementModel}
+\end{equation}
+
+\noindent where $\mathbf{s}_k$ is the 6-DOF vehicle pose at time $k$, $m$ is a topography map, $\tilde{\mathbf{y}}_k$ is an expected measurement for timestep $k$, and $h()$ is the measurement model.
+
+For the use of acoustic shadow data in sonar imagery, the expected measurement is a probabilistic visbility image.
+For each vehicle pose hypothesis $i$ at timestep $k$ an expected visibility image, $\tilde{\mathbf{y}}_k^{i}$, is generated, where each pixel in the image represents the probability that this pixel in the measured image is visible, i.e. is \emph{not} in acoustic shadow:
+
+\begin{equation}
+\tilde{\mathbf{y}}_k^{i}[u] \equiv p(\mathbf{y}_k[u] = 1 | \mathbf{s}_k^{i}, m)
+\label{eq:PM}
+\end{equation}
+
+\noindent where linear indexing is used here for the image.  
+%The generation of the expected visibility image is a major contribution of this work, and is the subject of Chapter \ref{ch.MeasurementModel}.
+
+Figure \ref{fig:expSignals} shows \emph{display} forms of the expected visbility images.  
+The form of the actual expected visibility images used for correlation is presented in Section \ref{framework.Measurement.Correlation}.
+The left image of the figure shows the display form of the expected visibility image for the location where the mechanically-scanned sonar image of Figure \ref{fig:shadowLabelingDisplay} was collected (top left image).
+The right image of Figure \ref{fig:expSignals} shows the display form of the expected visbility image that corresponds to the sidescan sonar image of Figure \ref{fig:shadowLabelingDisplay} (bottom left image).
+In the visibility images, red indicates a higher probability of visibility, and blue indicates a lower probability of visibility (i.e. a higher probability that the pixel is in acoustic shadow).
+
+\begin{figure}[!h]
+	\centering
+	\begin{subfigure}[b]{0.378\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_561_3}
+                \caption{}
+  	\end{subfigure}
+ 	\hspace{5ex}
+  	\centering
+	\begin{subfigure}[b]{0.545\textwidth}
+                \includegraphics[width=\textwidth]{sssSample1_Probs_Hatched}
+                \caption{}
+  	\end{subfigure}
+	\caption{Expected visibility images in \emph{display} form. Red indicates that the pixel has a higher probability of being visible in the measured image. Blue indicates that the pixel has a lower probability of being visible (i.e. higher probability of being in acoustic shadow). The hatched region is outside of the ``Correlation Region'', which is described in Section \ref{framework.Measurement.Correlation}. }	
+	\label{fig:expSignals}
+\end{figure}
+
+\subsection{Correlation Form of the Measurements}
+\label{framework.Measurement.Correlation}
+
+The non-hatched region of each of the display expected visibility images shown in Figure \ref{fig:expSignals} is the ``Correlation Region'' of the sonar image.
+The Correlaton Region is chosen to exclude pixels in the sonar imagery that should not be used for comparison with the measured imagery for state estimation.
+The Correlation Region is specified according to one or more of the following factors:
+
+\begin{itemize}
+\item \textbf{Minimum Range}. Pixels with range below a specified minimum range are excluded. For example, minimum range can be specified in order to avoid shadows due to non-returns below altitude range, or in order to prevent expected signal computation for ranges where useful shadow information is unlikely.  The right image of Figure \ref{fig:expSignals} is an example of a Non-Correlation Region specified by minimum range.
+
+\item \textbf{Maximum Range}. Pixels with range above a specified maximum range are excluded. For example, pixels with range above the vehicle depth may be discarded in order to prevent corruption of the return data by the water surface.
+
+\item \textbf{Vehicle Self-Shadowing}. Image ranges and azimuths may be excluded to avoid using shadow data that is caused by vehicle self-shadowing.  The left image of Figure \ref{fig:expSignals} is an example of a Non-Correlation Region specified in order to prevent vehicle self-shadowing, where the ROV geometry causes shadows in the corresponding sonar image, as seen in the upper plots of Figure \ref{fig:shadowLabelingDisplay}.
+
+\end{itemize}
+
+%The form of the expected and actual visibility images used for correlation are presented in the following section, where the Non-Correlation Regions are removed and the polar sonar image format is converted into a horizontal range-azimuth form.
+%
+%\subsubsection{Correlation Actual and Expected Measurments}
+%\label{framework.Measurement.Correlation.Expected}
+
+The actual and expected visibility images used for correlation take a rectangular range-azimuth form, and contain only Correlation Region pixels.
+For sidescan sonar visibility imagery, the horizontal range-azimuth form is unchanged.
+The main benefit of mapping polar imagery into the horizontal range-azimuth domain is to mitigate the effect of radial information spreading.
+That is, for a given angular wedge, the pixel count increases linearly with radius (range) in polar imagery.
+If the polar imagery were used for correlation, this would incorrectly weight pixels at higher range more heavily than they should be.
+
+%Topograpical map data for Correlation Region azimuth angles and ranges relative to the vehicle pose estimate are used to generate expected visbility imagery.
+The calculation of actual measurements according to (\ref{eq:shadowLabels}) and expected measurements (details in Chapter \ref{ch.MeasurementModel}) is only performed for Correlation Region pixels.
+The top row of images in Figure \ref{fig:measCORR} present the correlation form actual measurements for the images of Figure \ref{fig:shadowLabelingDisplay}.
+The bottom row of images in Figure \ref{fig:measCORR} present the correlation form expected measurements.
+Note that the polar scanned image is mapped to the horizontal domain according to azimuth angles starting at the vertical and proceeding clockwise to fill the horizontal image from bottom to top.
+
+\begin{figure}[!h]
+	\centering
+	\begin{subfigure}[b]{0.54\textwidth}
+                \includegraphics[width=\textwidth]{meas_shadows_561_3_ver2_CORRIMAGE}
+                \caption{}
+  	\end{subfigure}
+  	\hspace{8ex}
+  	\centering
+	\begin{subfigure}[b]{0.314\textwidth}
+                \includegraphics[width=\textwidth]{sssSample1_Shadows_CORRIMAGE}
+                \caption{}
+  	\end{subfigure}
+  	
+	\centering
+	\begin{subfigure}[b]{0.54\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_561_3_CORRIMAGE}
+                \caption{}
+  	\end{subfigure}
+ 	\hspace{8ex}
+  	\centering
+	\begin{subfigure}[b]{0.314\textwidth}
+                \includegraphics[width=\textwidth]{sssSample1_Probs_CORRIMAGE}
+                \caption{}
+  	\end{subfigure}	
+	\caption{Actual and expected visibility images in \emph{correlation} form. \emph{Top Row} (a)-(b) Actual measurements in correlation form for the images shown in Figure \ref{fig:shadowLabelingDisplay}. \emph{Bottom Row} (c)-(d) Expected measurements in correlation form for the images shown in Figure \ref{fig:expSignals}. }	
+	\label{fig:measCORR}
+\end{figure}
+
+%\subsubsection{Correlation Actual Measurments}
+%\label{framework.Measurement.Correlation.Actual}
+%
+%Figure \ref{fig:shadowLabeling} presents a sample actual measurement for scanning sonar imagery and sidescan sonar imagery.
+%The left images are the measured sonar images corresponding to the expected visibility images of Figure \ref{fig:expSignalsCORR}.
+%The top left image was collected by a mechanically-scanned imaging sonar.
+%The bottom left image was collected by a sidescan sonar. 
+%The middle images of Figure \ref{fig:shadowLabeling} are the measured visbility images for the corresponding left sonar images in \emph{display} format, akin to the imagery shown in Figure \ref{fig:expSignals}.
+%The right images are the measured visibility images used for correlation, which are formed in a similar manner to tthe expected visibility images used for correlation, as described in Section \ref{framework.Measurement.Expected.CorrImage}.
+%
+%\begin{figure}[!h]
+%  	\centering
+%	\begin{subfigure}[b]{0.28\textwidth}
+%                \includegraphics[width=\textwidth]{ms1000_561_3_c_brighter}
+%                \caption{}
+%         \end{subfigure}
+%         \centering
+%	\begin{subfigure}[b]{0.28\textwidth}
+%                \includegraphics[width=\textwidth]{meas_shadows_561_3_ver2}
+%                \caption{}
+%  	\end{subfigure}
+%  	\centering
+%	\begin{subfigure}[b]{0.4\textwidth}
+%                \includegraphics[width=\textwidth]{meas_shadows_561_3_ver2_CORRIMAGE}
+%                \caption{}
+%  	\end{subfigure}
+%  	
+%  	\centering
+%	\begin{subfigure}[b]{0.352\textwidth}
+%                \includegraphics[width=\textwidth]{sssSample1}
+%                \caption{}
+%  	\end{subfigure}
+%  	\centering
+%	\begin{subfigure}[b]{0.352\textwidth}
+%                \includegraphics[width=\textwidth]{sssSample1_Shadows}
+%                \caption{}
+%  	\end{subfigure}	
+%  	\centering
+%	\begin{subfigure}[b]{0.24\textwidth}
+%                \includegraphics[width=\textwidth]{sssSample1_Shadows_CORRIMAGE}
+%                \caption{}
+%  	\end{subfigure}
+%  	
+%	\caption{Measured shadow labeling in scanning sonar imagery and sidescan sonar imagery.  (a) Measured sonar image collected by a mechanically scanned imaging sonar. Range is proportional to radius from the image center. (b) Acoustic visbility image from measured scanned sonar image in \emph{display} form.  Shadows are shown as black pixels, visible returns are white. (c) Acoustic visibility image from measured scanned sonar image mapped into the Correlation Image format as detailed in Sections \ref{framework.Measurement.Expected.Correlation}, \ref{framework.Measurement.Expected.CorrImage}.  (d) Measured sidescan sonar image.  The horizontal axis of the sidescan sonar image is time of flight (or range) and the vertical axis denotes timesteps. (e) Acoustic visibility image from the sidescan sonar image. (f) Acoustic visbility image from sidescan sonar mapped into the Correlation Image format. }	
+%	\label{fig:shadowLabeling}
+%\end{figure}
+
+%\subsection{Region-growing and Morphological Image Processing}
+%\label{framework.Measured.Region}
+%
+%Additionally, a region-growing shadow labeling capability has been developed in order to assist the thresholding when it does not properly/cleanly label shadow regions.  The recursive region-growing algorithm takes as input a seed shadow location specified by the user, i.e. ROV operator. A mean intensity value for the shadow region is initialized to the seed pixel intensity. The algorithm then recursively steps outward to the four neighboring pixels and checks two conditions: (1) if the intensity value is within a threshold $\tau_1$ of the seed intensity value, and (2) if the intensity value is within a threshold $\tau_2$ of the mean shadow region intensity.  If a pixel passes these two conditions, the mean intensity value for the region is updated, and the algorithm recursively steps to the untested neighbors of this new shadow pixel location.  Pseudocode for the region-growing algorithm is given below:
+%
+%\begin{algorithm}
+%\caption{Region-growing acoustic shadow labeling}
+%\begin{algorithmic}
+%\State \textbf{Input: } Sonar intensity image $I$, seed pixel $(u_s, v_s)$
+%\State \textbf{Output: } Binary shadow image $M$
+%\State \textbf{Initialize: } 
+%\State $M[u,v]\gets 1 \hspace{2ex} \forall (u,v) \text{pixels}$
+%\State $\alpha \gets I[u_s,v_s] \hspace{2ex} \text{where} \hspace{1ex} \alpha \equiv \text{mean shadow intensity}$
+%\State $\beta \gets 1 \hspace{2ex} \text{where} \hspace{1ex} \beta \equiv \text{count of shadow pixels in region}$ 
+%\State $\textbf{Call:}$
+%\State $M \gets \text{regionGrower}(I,M,u_s,v_s,\alpha,\alpha,\beta)$ \\
+%\State \textbf{function} $\text{regionGrower}(I,M,u,v,\gamma,\alpha,\beta)$
+%\If {$|I[u,v] - \gamma| \leq \tau_1 \wedge |I[u,v] - \alpha| \leq \tau_2$} 
+%\State $\beta \gets \beta + 1$
+%\State $\alpha \gets ((\beta-1)\alpha + I[u,v])/\beta$ 
+%\State $M[u,v] \gets 0$
+%\ForAll {$(u_N,v_N) \in \text{neighbor set of pixel} (u,v)$}
+%\State $M \gets \text{regionGrower}(I,M,u_N,v_N,I[u,v],\alpha,\beta)$
+%\EndFor
+%\EndIf
+%\\
+%\Return $M$
+%\end{algorithmic}
+%\label{alg:regionGrow}
+%\end{algorithm}
+
+%In order to provide the capability to further clean the shadow detection process, morphological image processing may be employed. The overall effect of the morphological process is to eliminate noisy holes in shadow regions. The image is first eroded, which consists of sliding a structuring element (disk or square) over the image and performing a logical AND of the pixel values over the structuring element.  This has the positive effect of closing shadow holes, with the negative effect of growing shadow region boundaries.  The image is then dilated to compensate for shadow boundary growth, which is the same process as erosion but with a logical OR instead of AND.  Figure \ref{fig:morph} presents a measured shadow image before and after morphological image processing.
+%
+%\begin{figure}[!h]
+%	\centering
+%	\begin{subfigure}[b]{0.4\textwidth}
+%                \includegraphics[width=\textwidth]{MeasShadows2_raw_c}
+%                \caption{Measured Shadow Image before Morphological Processing}
+%  	\end{subfigure}
+%  	\hspace{10ex}
+%  	\centering
+%	\begin{subfigure}[b]{0.4\textwidth}
+%                \includegraphics[width=\textwidth]{MeasShadows2_c}
+%                \caption{Measured Shadow Image after Morphological Processing}
+%  	\end{subfigure}
+%	\caption{\small Morphological image processing on acoustic shadow images. (a) Raw shadow image labeled by thresholding. (b) Shadow image after morphological image processing.}	
+%	\label{fig:morph}
+%\end{figure}
+
+\subsection{Likelihood Function}
+\label{framework.Measurement.Weighting}
+
+The likelihood of an actual measurement for a pose estimate $i$ at timestep $k$, $p(\mathbf{y}_k | \mathbf{s}_k^{i}, m)$, is related to how well the actual measurement agrees with the expected measurement, and is calculable through a measurement likelihood function.
+The output of this likelihood function is the probability of the sonar measurement, conditioned on the vehicle pose and the topography map, $m$.
+
+The structure of the likelihood function depends on the nature of the measurement and the nature of the estimator.
+In this work, the actual measurement is highly nonlinear, and as such is ill-suited to estimators that require measurement model linearization.
+However, there are many estimators that evaluate the agreement of actual measurements with expected measurements from discrete pose estimate samples, and for these estimators the likelihood function presented in this work is appropriate.
+
+As the measurement described in Section \ref{framework.Measurement.Measured} is an image of binary assignments, the measurement likelihood function is derived from a simple relationship with regard to Bernoulli random variables.  Suppose a coin is flipped with an outcome of either heads or tails, expressed mathematically as $f \in \{0,1\}$.  Now suppose you flip a second biased coin, $\tilde{f} \in \{0,1\}$, where the probability of heads is $p$, i.e. $\text{Prob}(\tilde{f} = 1) = p$.  The probability that the biased coin outcome is equal to the first coin outcome, whatever the first outcome was, can be represented mathematically as: 
+
+\begin{align}
+\begin{split}
+\text{Prob}(f=\tilde{f}) &= p^{\mathbf{1}\{f=1\}} (1 - p)^{\mathbf{1}\{f=0\}} \\
+&= p^{f}(1-p)^{(1-f)}
+\end{split}
+\label{eq:binaryFlips}
+\end{align}
+
+The likelihood function introduced in this work is obtained by extending the relationship of Equation \ref{eq:binaryFlips}.
+The first coin concept is replaced by a pixel in the actual measurement (correlation visibility image).
+The biased coin concept is replaced by the corresponding pixel in the expected measurement (expected correlation visibility image).
+Finally, this ``one flip'' relationship is extended to all of the pixels in the correlation images, where the total agreement probability is the product of all individual pixel agreement probabilities.
+
+The measurement likelihood for pose estimate $i$ at timestep $k$, $p(\mathbf{y}_k | \mathbf{s}_k^{i}, m)$, is then given by the following relation:
+
+%\large
+\begin{equation}
+p(\mathbf{y}_k | \mathbf{s}_k^{i}, m)  = \prod_{u \in C} \tilde{\mathbf{y}}_k^{i}[u]^{\mathbf{y}_k[u]} (1 - \tilde{\mathbf{y}}_k^{i}[u])^{(1 - \mathbf{y}_k[u])}
+\label{eq:measWeight}
+\end{equation}
+%\normalsize
+\\
+\noindent where $\mathbf{y}_k$ is the actual measurement at timestep $k$, $\tilde{\mathbf{y}}_k^{i}$ is the expected measurement for pose estimate $i$ at timestep $k$, and $u$ indexes pixel location in the measurements.
+Term $C$ refers to the pixel domain of the correlation imagery, i.e. the rectangular pixel domain of the correlation images $\mathbf{y}_k$, $\tilde{\mathbf{y}}_k^{i}$.
+
+%\small
+%\begin{align}
+%\label{eq:weight1}
+%%\begin{split}
+%w_0^{(i,j)} &= \prod_{(u,v) \in C}  \underbrace{M[u,v]P[u,v]^{(i,j)}}_{\text{measured visible}} + \underbrace{\left(1 - M[u,v]\right)\left(1 - P[u,v]^{(i,j)}\right)}_{\text{measured shadow}} \\
+%w^{(i,j)} &= \frac{w_0^{(i,j)}}{\sum_i \sum_j w_0^{(i,j)}} 
+%\label{eq:weight2}
+%%\end{split}
+%\end{align} 
+%\normalsize
+
+\section{Motionless Case: Batch Likelihood Estimator}
+\label{framework.Motionless}
+%
+%The preceding sections provided an introduction to the measurement likelihood function that is a major contribution of this work.
+%Another contribution of this thesis is estimator designs for the use of this measurement likelihood for map-relative position localization of underwater robotic vehicles.
+
+In this section, a sampling-based estimator is detailed for the estimation of vehicle position with a single sonar image, collected while the vehicle remains motionless.
+This estimator is suitable for ROV operations, or for hover-capable AUVs.
+
+The estimated state is horizontal 2-D Northings and Eastings vehicle position $\textbf{x} = [x_{N}, x_{E}]^{T}$, relative a horizontal datum, as overviewed in Section \ref{framework.Frames}.
+The horizontal datum is the best prior latitude/longitude estimate available, provided by an integrated INS solution or USBL.
+The remainder of vehicle pose states are measured by onboard sensing, as discussed in Section \ref{framework.Frames}.
+Restricting the estimated state space to two dimensions is computationally beneficial, as in general sampling-based state estimation is computationally exponential in the number of states.
+
+As the vehicle remains motionless during measurement, and the estimated state is a single map-relative vehicle position, there are no time updates.
+Further, a uniform prior over discrete position estimates is assumed.
+Although the horizontal datum could be used to specify a non-uniform prior distribution on vehicle position, the map geo-referencing errors are, in general, unknown, and as such the uniform prior is employed.
+With a uniform prior and no motion updates, the Bayesian estimation problem reduces to likelihood estimation, where the posterior distribution is given by:
+
+\begin{equation}
+p(\mathbf{x} | \mathbf{y}, \mathbf{\pi}, m ) = \hspace{1ex} \frac{p(\mathbf{y} | \mathbf{x}, \mathbf{\pi}, m)}{\sum_{i} p(\mathbf{y}|\mathbf{x}^{i}, \mathbf{\pi}, m)} = \eta p(\mathbf{y} | \mathbf{x}, \mathbf{\pi}, m)
+\label{eq:likelihood}
+\end{equation}
+
+\noindent where $\mathbf{y}$ is the measurement, $m$ is the terrain map, and $\mathbf{\pi} \equiv (\phi, \theta, \psi, x_A)$ are the measured (not estimated) vehicle pose states.  The most likely pose estimate is the maximum likelihood estimate (MLE), given by:
+
+\begin{equation}
+\mathbf{x}^{\text{MLE}} = \underset{\mathbf{x}}{\text{argmax}} \hspace{1ex} p(\mathbf{y} | \mathbf{x}, \mathbf{\pi}, m)
+\label{eq:ML}
+\end{equation}
+%
+%\noindent where $p(\mathbf{y} | \mathbf{x}, m)$ is specified by Equation \ref{eq:measWeight}.  
+
+Note that the estimator presented here is not strictly a maximum likelihood (ML) estimator.
+In the field of estimation, maximum likelihood (ML) estimators solve for the MLE as the sole objective.
+ML estimators can be interpreted equally as non-Bayesian, where the MLE state value is not considered a random variable, or as Bayesian estimators with a uniform prior on the state.
+The likelihood estimator presented here is not a ML estimator, as the vehicle position is modeled as a random variable whose distribution is estimated.
+That is, unlike a ML estimator, the likelihood estimator in this work is not solely interested in obtaining the MLE, but is concerned with estimating the \emph{distribution} as well.
+
+Figure \ref{fig:batchDiagram} provides a block diagram of the multi-resolution batch likelihood estimation process.
+First, a position probability distribution over coarse-resolution samples is calculated.
+Using this distribution, likely areas of the state space are sampled at a fine-resolution, and a fine-resolution probability distribution is generated from these new samples.
+Finally, the coarse-resolution and fine-resolution probability distributions are fused in order to yield the output position probability distribution.
+Through this multi-resolution sampling, a fine-resolution position estimate is obtained with minimal computation, i.e. fine-resolution sampling is not wasted on unlikely areas of the state space.
+
+\begin{figure}[!h]
+	\centering
+         \includegraphics[width=0.8\textwidth]{BatchDiagram}
+         \caption{Block diagram for the batch likelihood estimator}
+	\label{fig:batchDiagram}
+\end{figure}
+
+%The following sub-sections detail the sampling-based likelihood estimator.
+%Section \ref{framework.Motionless.Coarse} describes coarse-resolution sampling and expected measurement generation.
+%The evaluation of position likelihoods through the measurement likelihood function is described in Section \ref{framework.Motionless.Likelihood}.
+%Section \ref{framework.Motionless.Estimate} describes estimate refinement through fine-resolution sampling and likelihood evaluation in areas of the state space with high coarse-resolution likelihood.
+
+%
+%Initially, a grid of position estimates is instantiated about the horizontal datum (e.g. USBL estimate) at a coarse resolution.  
+%
+%This expected measurement is then correlated with actual measurements according to Equation \ref{eq:measWeight} in order to assign a likelihood to each position estimate.
+%Figure \ref{fig:estDiagram} illustrates the overview of the sampling-based estimator.
+%
+%\begin{figure}[!h]
+%	\centering
+%		\includegraphics[width=1.0\textwidth]{EstimationFlowchart_linear}
+%	\caption{Localization method overview diagram. }
+%	\label{fig:estDiagram}
+%\end{figure}
+%\begin{figure}[!h]
+%	\centering
+%		\includegraphics[width=0.8\textwidth]{LikelihoodEstimatorDiagram}
+%	\caption{Likelihood estimator overview. }
+%	\label{fig:estDiagram}
+%\end{figure}
+
+\subsection{Coarse-Resolution Sampling and Expected Measurements}
+\label{framework.Motionless.Coarse}
+
+Coarse-resolution position estimate samples are initialized around the best \emph{a priori} absolute position estimate in a two-dimensional grid.
+The index $i$ references estimate positions in Easting and Northing dimensions, respectively.  
+For typical ROV operations, the \emph{a priori} estimate is provided by USBL from the surface vessel.
+For AUVs, the \emph{a priori} estimate may be provided by integrated INS odometry from a last absolute position estimate, e.g. a prior GPS surface estimate.
+
+Figure \ref{fig:coarseInit} presents a square coarse-resolution sample grid.  The black asterisk is the \emph{a priori} position estimate, and the red circles form the discrete position estimate grid centered about the prior estimate.
+For each position estimate $i$ an expected measurement, $\tilde{\mathbf{y}}^{i}$, is generated, as overviewed in Section \ref{framework.Measurement}, where the details of the measurement model are left to Chapter \ref{ch.MeasurementModel}.
+\\
+\begin{figure}[!h]
+	\centering
+         \includegraphics[width=1.0\textwidth]{LikelihoodEstimation2_1}
+         \caption{Likelihood estimator coarse-resolution sampling and expected measurement generation. The grid center is the \emph{a priori} position estimate, shown as a black asterisk. The red circles are position estimates.  In this case, the grid is $100m$ x $100m$, spaced $5m$.}
+	\label{fig:coarseInit}
+\end{figure}
+%\begin{figure}[!h]
+%	\centering
+%         \includegraphics[width=0.6\textwidth]{pmfGrid_nocolorbar}
+%         \caption{PMF initialization grid over a topography DEM. The grid center is the \emph{a priori} position estimate, shown as a black asterisk. The red circles are PMF estimates.  In this case, the grid is $100m$ x $100m$, spaced $5m$.}
+%	\label{fig:pmfInit}
+%\end{figure}
+
+The size of the grid, $(N_e, N_n)$, and grid spacing, $\Delta$, are chosen according to the competing objectives of capturing the true state distribution, i.e. covering the true position, and minimizing the computation.
+The size of the grid depends on uncertainty from two main sources: (1) error in the \emph{a priori} absolute position estimate, and (2) map geo-referencing error. 
+For the ROV results presented in Chapter \ref{ch.ROV}, the grid is $100m$ x $100m$ and the coarse resolution is $5m$, i.e. $\Delta = 5m$ and $(N_e, N_n) = (21, 21)$.
+
+\subsection{Likelihood Evaluation}
+\label{framework.Motionless.Likelihood}
+
+%The likelihood of the measurement for each position estimate sample is computed.  
+The likelihood of each position estimate sample $i$, $p(\mathbf{y} | \mathbf{x}^{i}, m, \pi)$, is evaluated by Equation \ref{eq:measWeight}, which takes the expected measurement, $\tilde{\mathbf{y}}^{i}$, and the actual measurement,$\mathbf{y}$, as inputs.
+Note that the timestep notation from Equation \ref{eq:measWeight} does not apply here, as there are no time updates.
+In order to compute a coarse-resolution posterior distribution, likelihoods are normalized according to Equation \ref{eq:likelihood}.
+
+\begin{align}
+\begin{split}
+p^{*}(\mathbf{x}^{i} | \mathbf{y}, \mathbf{\pi}, m ) &= \hspace{1ex} \prod_{u \in C} \tilde{\mathbf{y}}^{i}[u]^{\mathbf{y}[u]} (1 - \tilde{\mathbf{y}}^{i}[u])^{(1 - \mathbf{y}[u])} \\
+p(\mathbf{x}^{i} | \mathbf{y}, \mathbf{\pi}, m ) &= \frac{p^{*}(\mathbf{x}^{i} | \mathbf{y}, \mathbf{\pi}, m )}{\sum_j p^{*}(\mathbf{x}^{j} | \mathbf{y}, \mathbf{\pi}, m ) }
+\end{split}
+\label{eq:likelihood}
+\end{align}
+
+%\noindent For coarse-resolution likelihood evaluation $\mathbf{x} = \mathbf{x}_c$.
+
+Figure \ref{fig:likelihood} provides a graphical depiction of the likelihood evaluation process, where the posterior distribution surface is obtained from correlation of expected measurements with the actual measurement.
+
+\begin{figure}[!h]
+	\centering
+         \includegraphics[width=1.0\textwidth]{LikelihoodEstimation2_2}
+         \caption{Likelihood evaluation.  The likelihood of each position estimate sample for the likelihood estimator is evaluated by the likelihood function of (\ref{eq:measWeight}), taking the actual measurement and the expected measurement as inputs.}
+	\label{fig:likelihood}
+\end{figure}
+
+\subsection{Estimate Refinement}
+\label{framework.Motionless.Estimate}
+
+Multi-resolution position sampling is employed in order to sample at a fine resolution in likely areas.
+The ``likely'' areas are determined by the coarse-resolution likelihood surface.
+Higher resolution position estimates are instantiated about coarse-resolution estimates with likelihood probabilities above a threshold, depicted graphically in Figure \ref{fig:fineSampling}.
+Multi-resolution estimation allows for fine-resolution position estimation without the computational cost of the fine resolution sampling over the entire search area.
+
+\begin{figure}[!h]
+	\centering
+         \includegraphics[width=1.0\textwidth]{LikelihoodEstimation3_1}
+         \caption{Fine-resolution sampling from the coarse-resolution likelihood distribution.}
+	\label{fig:fineSampling}
+\end{figure}
+
+\subsubsection{Fine-Resolution Sampling}
+\label{framework.Motionless.Estimate.Sampling}
+
+The population of fine-resolution samples is done through a 4-neighbor connected scheme, shown pictorally in Figure \ref{fig:refinegrid_diagram}.  
+The red circles are the fine-resolution grid cells and the blue crosses the coarse-resolution cells.
+
+\begin{figure}[!h]
+	\centering
+	\begin{subfigure}[b]{0.4\textwidth}
+		\includegraphics[width=\textwidth]{RefinedGrid_Diagram}
+		\caption{}
+		\label{fig:refinegrid_diagram}
+	\end{subfigure}
+	\hspace{8ex}
+	\centering
+	\begin{subfigure}[b]{0.415\textwidth}
+		\includegraphics[width=\textwidth]{RefinedGrid_Diagram_2}
+		\caption{}
+		\label{fig:resolution}
+	\end{subfigure}
+	\caption{Connected 4-neighbor fine-resolution sampling schemes.  Blue crosses are coarse-resolution grid cells.  Red circles are fine-resolution samples. (a) Refinement about one coarse-resolution estimate. (b) Refinement about two diagonally-adjacent coarse-resolution estimates.  }	
+\end{figure}
+
+For this work, the refined estimates are populated with a maximum spatial resolution of 1m. 
+This resolution value is a natural choice, given that the topography maps used in this work are meter-resolution DEMs.  
+Further, the relationship between coarse- and fine-resolutions is chosen according to a compromise between accuracy and computational burden.  
+%Figure \ref{fig:resolutionTrend} presents the trend for number of refined estimates that are populated  in the connected 4-neighbor population scheme for one coarse-resolution estimate as a function of the ratio of fine- to coarse-grid resolution.
+%
+%\begin{figure}[!h]
+%	\centering
+%	\includegraphics[width=0.8\textwidth]{RefinedGrid_ResolutionTrend}
+%	\caption{Connected 4-neighbor computation trend for one coarse-grid cell subdivision as a function of the ratio of fine-grid resolution to coarse-grid resolution.}
+%	\label{fig:resolutionTrend}
+%\end{figure}
+
+The mathematical description of the selection of coarse-resolution cells about which to populate fine-resolution estimates, $\mathbb{X}_R$, and the 4-connected neighbors, $\mathbb{X}_N$, is provided below:
+
+\begin{align}
+\begin{split}
+\mathbf{x}^{i} &\in \mathbb{X}_R \hspace{1ex} \text{if} \hspace{1ex} p(\mathbf{x}^{i} | \mathbf{y}, m, \pi) \geq \tau_{R} \\
+\mathbf{x}^{j} &\in \mathbb{X}_N \hspace{1ex} \text{if} \hspace{1ex} | \mathbf{x}^{j} - \mathbf{x}^{i} | = \Delta \hspace{1ex} \text{for any} \hspace{1ex} \mathbf{x}^{i} \in \mathbb{X} _R \wedge \mathbf{x}^{j} \not \in \mathbb{X}_R\\ \\
+&\text{where} \\ \\
+\mathbb{X}_R \equiv &\hspace{1ex}\text{set of coarse-resolution position estimates about which} \\
+& \text{to populate fine-resolution estimates} \\
+\mathbb{X}_N \equiv &\hspace{1ex}\text{set of coarse-resolution estimates that are 4-connection neighbors} \\ 
+&\text{of estimates in } \hspace{1ex} \mathbb{X}_R \\
+\tau_R \equiv &\hspace{1ex}\text{refinement threshold} \\
+\Delta \equiv &\hspace{1ex}\text{coarse-resolution grid spacing (uniform in Eastings and Northings)} \\
+\end{split}
+\label{eq:Sets}
+\end{align}
+\\
+
+The total posterior probability weight assigned to fine-resolution cells, $w_r$, is based on the posterior probabilities of the refined estimates and their 4-connected neighbors:
+
+\begin{align}
+\begin{split}
+w_r &= \sum_{i \in \mathbb{X}_R} [\hspace{0.5ex} p(\mathbf{x}^{i} | \mathbf{y}, \mathbf{\pi}, m) \hspace{0.3ex}] + \frac{1}{2} \sum_{j \in \mathbb{X}_N}  p(\mathbf{x}^{j} | \mathbf{y}, \mathbf{\pi}, m) \\
+%w_u &= \sum_{(i,j) \notin \mathbb{R}_k, \mathbb{N}_k} p(\mathbf{x}_k[i,j] | \mathbb{Y}_k) \\
+\end{split}
+\label{eq:refineWeights}
+\end{align}
+
+\subsubsection{Likelihood Evaluation and the Posterior Distribution}
+\label{framework.Motionless.Estimate.Likelihood}
+
+The likelihood of the each fine-resolution estimate is calculated in the same manner as the coarse-resolution estimates, through the likelihood function given by (\ref{eq:measWeight}), as described in Section \ref{framework.Motionless.Likelihood}.
+For each sample in the fine-resolution set $\mathbb{X}_F$, a likelihood probability, $p(\mathbf{x}^{i} | \mathbf{y}, \mathbf{\pi}, m)$, is calculated, where this is a valid probability that sums to one over the fine-resolution estimates ($ \sum_{i \in \mathbb{X}_F} p(\mathbf{x}^{i} | \mathbf{y}, \mathbf{\pi}, m) = 1$).
+
+The full (multi-resolution) position posterior distribution is calculated as a weighted combination of the posterior distributions over the fine-resolution estimates, $\mathbb{X}_F$,  the coare-resolution neighbor estimates, $\mathbb{X}_N$, and the non-refined coarse-resolution estimates according to:
+
+\begin{align}
+\begin{split}
+p(\mathbf{x}^{i} | \mathbf{y}, \mathbf{\pi}, m) = \left\{ 
+  \begin{array}{l l}
+    w_r p(\mathbf{x}^{i} | \mathbf{y}, \mathbf{\pi}, m) & \quad \text{if $\mathbf{x}^{i} \in \mathbb{X}_F$} \\
+    \frac{1}{2} p(\mathbf{x}^{i} | \mathbf{y}, \mathbf{\pi}, m) & \quad \text{if $\mathbf{x}^{i} \in \mathbb{X}_N$} \\
+    p(\mathbf{x}^{i} | \mathbf{y}, \mathbf{\pi}, m) & \quad \text{otherwise}
+  \end{array} \right.
+\end{split}
+\label{eq:posteriorProb}
+\end{align}
+
+
+\section{Motion Case: Point Mass Filter (PMF)}
+\label{framework.PMF}
+
+For the motion case where measurements are obtained as the underwater vehicle moves, the estimator formulation of the previous section is not sufficient.  
+The estimator presented in this work for the motion case is an implementation of a point mass filter (PMF).
+
+A PMF is a non-parametric filter that propagates discrete state estimates in order to model an underlying posterior state distribution.
+PMFs have been used extensively in underwater navigation solutions, and are detailed in \cite{Anonsen2006}.  
+
+As in the motionless case, the PMF estimated state is horizontal 2-D Northings and Eastings vehicle position $\textbf{x} = [x_{N}, x_{E}]^{T}$, relative a horizontal datum.
+The horizontal datum is the best latitude/longitude estimate from either an integrated INS solution or USBL.
+
+As with all Bayesian recursive state estimators, a PMF requires an initialization (Section \ref{framework.PMF.Initialization}), and then involves the interplay of two updates: a time update (Section \ref{framework.PMF.Time}) and a measurement update (Section \ref{framework.PMF.Measurement}).  The time update propagates vehicle motion between sensor measurement timesteps, and the measurement update incorporates new sensory data into the state estimate.  
+Figure \ref{fig:frameworkMotion1} provides a block diagram of the PMF estimator design.
+
+%The following sections detail the PMF initialization (\ref{framework.PMF.Initialization}), the time update (\ref{framework.PMF.Time}), and the measurement update (\ref{framework.PMF.Measurement}).
+%The measurement update will be nearly identical to that of the likelihood estimator for the motionless case described in Section \ref{framework.Motionless}, where the update is based on the measurement likelihood function introduced in Section \ref{framework.Measurement}.
+
+\subsection{Initialization}
+\label{framework.PMF.Initialization}
+
+%PMF discrete position estimates $\mathbf{x}_o[i]$ are initialized around the best \emph{a priori} absolute position estimate.  
+%For AUVs, the \emph{a priori} estimate may be provided by integrated INS odometry from a last absolute posiiton estimate, e.g. a prior GPS surface estimate.
+%Figure \ref{fig:pmfInit} presents a square initial PMF grid.  The black asterisk is the \emph{a priori} position estimate, and the red circles are the PMF discrete position grid centered about the prior estimate.
+%
+%\begin{figure}[!h]
+%	\centering
+%         \includegraphics[width=0.6\textwidth]{pmfGrid_nocolorbar}
+%         \caption{PMF initialization grid over a topography DEM. The grid center is the \emph{a priori} position estimate, shown as a black asterisk. The red circles are PMF estimates.  In this case, the grid is $100m$ x $100m$, spaced $5m$.}
+%	\label{fig:pmfInit}
+%\end{figure}
+%
+%The size of the grid, $(N_e, N_n)$, and grid spacing, $\Delta$, are chosen according to the competing objectives of capturing the true state distribution, i.e. covering the true position, and minimizing the computation.
+%The size of the grid depends on uncertainty from two main sources: (1) error in the \emph{a priori} absolute position estimate, and (2) map geo-referencing error. 
+
+PMF discrete position estimates $\mathbf{x}_o^{i,j}$ are initialized in the same manner as the coarse-resolution position samples for the motionless case likelihood estimator, as described in Section \ref{framework.Motionless.Coarse}.
+The size of the grid, $(N_e, N_n)$, and grid spacing, $\Delta$, are chosen according to the competing objectives of capturing the true state distribution, i.e. covering the true position, and minimizing the computation.
+The required size of the grid depends on uncertainty from two main sources: (1) error in the \emph{a priori} absolute position estimate, and (2) map geo-referencing error. 
+
+The prior distribution on $\mathbf{x}_o^{i}$ may be specified in a number of ways.
+A uniform prior for the rectangular grid may be specified as:
+
+\begin{equation}
+p(\mathbf{x}_o^{i,j}) = \frac{1}{N_e N_n} 
+\label{eq:uniformPrior}
+\end{equation}
+
+\noindent where $N_e$ and $N_n$ are the grid dimensions in Eastings and Northings, respectively. In this work, uniform priors on rectangular grids will be used primarily, as the prior on geo-referencing error is considered uniform.
+
+If the prior knowledge on vehicle position is considered more informative, then a non-uniform prior may be specified.  A common non-uniform prior is the Gaussian prior, of which a discrete approximation can be formed as follows, assuming uniform grid spacing in both dimensions :
+
+\begin{align}
+\begin{split}
+p(\mathbf{x}_o^{i,j}) &= \frac {\text{exp}(-\frac{1}{2}(\mathbf{x}_o^{i,j})^{T}\Sigma_o^{-1}\mathbf{x}_o^{i,j})}{\sum_{k=1}^{N_e} \sum_{l=1}^{N_n} \text{exp}(-\frac{1}{2}(\mathbf{x}_o^{k,l})^{T}\Sigma_o^{-1}\mathbf{x}_o^{k,l})}
+\end{split}
+\label{eq:nonuniformPrior}
+\end{align}
+
+Usage of both the Gaussian prior and the uniform prior will be compared in the results of Chapter \ref{ch.AUV}.
+
+\subsection{Time Update}
+\label{framework.PMF.Time}
+
+The PMF time update propagates the state estimation grid deterministically according to the INS vehicle motion estimate, and updates the state distribution probabilities according to estimates of motion noise.
+The motion model for the PMF will be modeled as:
+
+\begin{align}
+\begin{split}
+\tilde{\mathbf{x}}_k^{i,j} &= \mathbf{x}_{k-1}^{i,j} + \mathbf{u}_k + \mathbf{\xi}_k \\
+\mathbf{\xi}_k &\sim \mathcal{N}(\mathbf{0}, W_k) 
+\end{split}
+\end{align}
+
+\noindent where $\mathbf{u}_k$ is the integrated INS odometry estimates from timestep $k-1$ to $k$, and $\mathbf{\xi}_k$ is zero-mean, normally-distributed noise with covariance $W_k$.
+
+The motion update for the PMF may be generically described by:
+
+\begin{align}
+\begin{split}
+p(\mathbf{x}_k^{(i,j)}|\mathbb{Y}_{k-1}) &= \sum_{q=1}^{N_e} \sum_{r=1}^{N_n} p(\mathbf{x}_k^{(i,j)} | \mathbf{x}_{k-1}^{(q,r)}, \mathbf{u}_k, \mathbf{\xi}_k) p(\mathbf{x}_{k-1}^{(q,r)}|\mathbb{Y}_{k-1})
+\end{split}
+\label{eq:pmfMotionUpdate}
+\end{align}
+
+The motion update according to Equation \ref{eq:pmfMotionUpdate} is a 2-D convolution.  In this work, the convolution is numerically approximated according to the following procedure:
+
+\begin{enumerate}
+\item Propagate the position estimates according to the INS estimate: 
+
+\begin{equation}
+\tilde{\mathbf{x}}_k^{i,j} = \mathbf{x}_{k-1}^{i,j} + \mathbf{u}_k
+\end{equation}
+
+\noindent where the position distribution is preserved $p(\tilde{\mathbf{x}}_k^{i,j} | \mathbb{Y}_{k-1}) = p(\mathbf{x}_{k-1}^{i,j} | \mathbb{Y}_{k-1})$.
+
+\item Motion noise is propagated through the discrete position distribution by the convolution of the INS-updated distribution $p(\tilde{\mathbf{x}}_k ^{(i,j)}| \mathbb{Y}_{k-1})$ with a discrete noise kernel $K_{W_k}$ with limited support.  The noise kernel in this work is square, with size $(2N_k + 1) \hspace{0.3ex} \text{x} \hspace{0.3ex} (2N_k + 1)$, dependent on the modeled noise covariance $W_k$:
+
+\begin{align}
+\begin{split}
+p(\mathbf{x}_k^{(i,j)} | \mathbb{Y}_{k-1}) &= \sum_{q=-N_k}^{N_k} \sum_{r=-N_k}^{N_k}  K_{W_k}[q,r] p(\tilde{\mathbf{x}}_k^{(i+q, j+r)} | \mathbb{Y}_{k-1}) \\
+\end{split}
+\label{eq:pmfTimeUpdate}
+\end{align}
+
+\noindent TODO: mathematical description of the kernel $K_{W_k}$
+
+\end{enumerate}
+
+\subsection{Measurement Update}
+\label{framework.PMF.Measurement}
+
+The PMF measurement update calculates the position estimate posterior distribution by the following procedure:
+
+ \begin{enumerate}
+ 
+ \item For each discrete position estimate, $\mathbf{x}_k^{i,j}$, the measurement update function in Equation \ref{eq:measWeight} is evaluated to yield $p(\mathbf{y}_k | \mathbf{x}_k^{i,j}, \mathbf{\pi}, m)$. 
+ 
+ \item The un-normalized posterior position estimate weight, $p^{*}(\mathbf{x}_k^{i,j} | \mathbb{Y}_k)$, is calculated by multiplication of the time update probability, given by Equation \ref{eq:pmfTimeUpdate}, by the measurement update weight $p(\mathbf{y}_k | \mathbf{x}_k^{i,j}, \mathbf{\pi}, m)$:
+ 
+ \begin{align}
+ \begin{split}
+ p^{*}(\mathbf{x}_k^{i,j} | \mathbb{Y}_k) &= p(\mathbf{y}_k | \mathbf{x}_k^{i,j}, \mathbf{\pi}, m) p(\mathbf{x}_k^{i,j} | \mathbb{Y}_{k-1}) 
+ \end{split}
+ \label{eq:pmfMeasUn}
+ \end{align}
+ 
+ \item The posterior position weights given by Equation \ref{eq:pmfMeasUn} are mapped into probabilities by normalizing the results over the discrete position estimate domain:
+ 
+ \begin{align}
+ \begin{split}
+ p(\mathbf{x}_k^{i,j} | \mathbb{Y}_k) = \frac{p^{*}(\mathbf{x}_k^{i,j} | \mathbb{Y}_k)}{\sum_{q=1}^{N_e} \sum_{r=1}^{N_n} p^{*}(\mathbf{x}_k^{q,r} | \mathbb{Y}_k)}
+ \end{split}
+ \label{eq:pmfMeasNormalize}
+ \end{align}
+ 
+ \end{enumerate}
+
+\section{Estimate Statistics}
+\label{framework.Statistics}
+
+Estimator summary statistics and tools for automatic analyses of results are presented in the following sections.  
+These summary statistics are useful for assessing estimator confidence and the chance that the estimator has converged to a false position estimate.
+
+\subsection{Entropy}
+\label{framework.Statistics.Entropy}
+
+Entropy is used in this work as a measure of the uncertainty in the position posterior probability distribution.
+Entropy in information theory was introduced in the seminal work of Shannon \cite{shannon1948mathematical}.
+Shannon, in the context of signal communication, presented entropy as the average information (bits) needed to code a signal.
+Entropy in this work is given by the following relation:
+
+\begin{equation}
+H(\mathbb{X}_k | \mathbb{Y}_k) = - \sum_i p(\mathbf{x}_k^{i} | \mathbb{Y}_k) \text{log} ( p(\mathbf{x}_k^{i} | \mathbb{Y}_k) )
+\label{eq:entropy}
+\end{equation}
+
+\noindent where the natural logarithm is used int his work, and entropy is thus expressed in units of ``nats''.  
+In information theory, entropy is often expressed using a base-2 logarithm such that the entropy can be interpreted as the average number of bits needed to encode the information signal.
+In this work, the choice of logarithm base is somewhat arbitrary, and there is an equivalence between entropy with the different logarithm base choices according to $H_{\text{nats}} = \text{log}(2) H_{\text{bits}}$.
+
+A higher entropy, $H(\mathbb{X}_k | \mathbb{Y}_k)$, indicates a distribution that is more uncertain.
+In particular, a high entropy is a strong indicator that the estimate should not be trusted.
+Figure \ref{fig:entropy} presents three position posterior distributions, ordered from left to right with increasing entropy.
+
+\begin{figure}[!h]
+	\centering
+	\begin{subfigure}[b]{0.32\textwidth}
+                \includegraphics[width=\textwidth]{PMF_pcolor_1024_2014_005}
+                \caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.32\textwidth}
+                \includegraphics[width=\textwidth]{PMF_pcolor_12062014_025}
+                \caption{}
+  	\end{subfigure}
+	\centering
+	\begin{subfigure}[b]{0.32\textwidth}
+                \includegraphics[width=\textwidth]{PMF_pcolor_1024_2014_001}
+                \caption{}
+  	\end{subfigure}
+ 	
+ 	\begin{subfigure}[b]{0.32\textwidth}
+                \includegraphics[width=\textwidth]{PMF_surf_1024_2014_005}
+                \caption{}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.32\textwidth}
+                \includegraphics[width=\textwidth]{PMF_surf_12062014_025}
+                \caption{}
+  	\end{subfigure}
+	\centering
+	\begin{subfigure}[b]{0.32\textwidth}
+                \includegraphics[width=\textwidth]{PMF_surf_1024_2014_001}
+                \caption{}
+  	\end{subfigure}
+  	
+	\caption{Distributions with increasing entropy left to right. The upper row images show the distributions in 2D, and the lower row show a 3D view of the distributions. Entropy values are in nats. (a),(d) $H = 0.89$ (b),(e) $H=1.87$  (c),(f) $H=5.92$}	
+	\label{fig:entropy}
+\end{figure}
+
+Entropy as a measure of estimator uncertainty is well-suited to non-parametric, often multi-modal position distributions.
+Entropy according to Equation \ref{eq:entropy} makes no assumptions on the form of the probability distribution.
+Thus, a multi-peaked distribution is just as naturally described by entropy as a Gaussiand distribution.
+While this flexibility is a feature, it also has a weakness.
+The spread of the distribution in the position domain is not modeled by entropy.
+That is, a distribution of four peaks in the center of the position grid has the same entropy as the same four peaks at the four corners of the position grid.
+The following section describes another class of statistics suitable for multi-modal distributions that takes probability spread in the position domain into account.
+
+
+\subsection{Probability Mass about the Posterior Mode (MLE)}
+\label{framework.Statistics.Probability}
+
+Another type of non-parametric statistic that can be used to quantify estimator confidence is the posterior probability mass within some distance of the posterior mode.
+The mode is the most probable position estimate in the distribution, i.e. the tallest peak.
+In maximum likelihood estimation, the mode is referred to as the Maximum Likelihood Estimate (MLE).
+In Bayesian estimation (particularly with an informative prior), the mode is referred to as the Maximum A Posteriori (MAP) estimate.
+The probability mass within some given distance of the mode is a measure of how tightly probability mass is grouped around the mode.
+In this work, and in addition to entropy, this statistic is used as a means of quantifying estimator uncertainty in the mode estimate.
+
+The ``mass within $x$'' statistic, $\alpha_\emph{x}$, is now defined as the posterior probability mass within $x$ distance (meters) of the posterior mode (MAP or MLE):
+
+\begin{equation}
+\alpha_\emph{x} \equiv \sum_i \mathbf{1}\{ | \mathbf{x}_k^{i} - \mathbf{x}_k^{\text{MLE}} | \leq \emph{x}\} p(\mathbf{x}_k^{i} | \mathbb{Y}_k)
+\label{eq:alpha}
+\end{equation}
+
+For example, $\alpha_5$ is the probability mass within $5m$ of the posterior mode (including the posterior mode probability).
+
+%\subsection{Similarity Score}
+%\label{framework.Statistics.Similarity}
+%
+%TODO
+
+\subsection{Mean and Covariance}
+\label{framework.Statistics.Moments}
+
+The posterior distribution mean and covariance matrix are moment-based statistics, and are commonly used as primary summary statistics for a distribution.
+The mean and covariance as estimated by:
+
+\begin{align}
+\begin{split}
+\bar{\textbf{x}}_k &= \sum_i \mathbf{x}_k^{i} p(\mathbf{x}_k^{i} | \mathbb{Y}_k) \\
+\Sigma_k &= \sum_i \left(\mathbf{x}_k^{i} - \bar{\textbf{x}}_k\right)\left(\mathbf{x}_k^{i} - \bar{\textbf{x}}_k\right)^{T} p(\mathbf{x}_k^{i} | \mathbb{Y}_k) = \begin{bmatrix} \sigma_N^{2} & \sigma_{NE} \\ \sigma_{NE} & \sigma_E^{2} \end{bmatrix}_k
+\label{eq:meanCov}
+\end{split}
+\end{align}
+%\begin{align}
+%\begin{split}
+%\hat{\textbf{x}}_k &= \sum_i \begin{bmatrix} x_{E}(i) \\ x_{N} \end{bmatrix}_k^{i} p(\mathbf{x}_k^{i} | \mathbb{Y}_k) \\
+%\Sigma_k &= \sum_i \left(\begin{bmatrix} x_{E} \\ x_{N} \end{bmatrix}_k^{i} - \hat{\textbf{x}}_k\right)\left(\begin{bmatrix} x_{E} \\ x_{N} \end{bmatrix}_k^{i} - \hat{\textbf{x}}_k\right)^{T} p(\mathbf{x}_k^{i} | \mathbb{Y}_k) \\
+%&= \begin{bmatrix} \sigma_N^{2} & \sigma_{NE} \\ \sigma_{NE} & \sigma_E^{2} \end{bmatrix}_k
+%\label{eq:meanCov}
+%\end{split}
+%\end{align}
+
+The posterior mean is the minimum mean-squared error (MMSE) estimate, assuming an unbiased estimator [REF].
+
+Statistics from the covariance matrix can be used for quantification of estimator confidence.
+Statistics of particular interest are the standard deviations in Northings and Eastings, $\sigma_N$ and $\sigma_E$, respectively, and the the root determinant of covariance (RDC):
+
+\begin{equation}
+\text{RDC} \equiv \sqrt{| \Sigma_k | } = \sqrt{ \sigma_N^{2} \sigma_E^{2} - \sigma_{NE}^{2} }
+\end{equation}
+
+Small standard deviations and RDC imply high filter confidence, but the reverse is not necessarily true. 
+That is, due to multi-modality a posterior distribution with higher standard deviations and RDC may still possess a strong convergence on the MLE. 
+This situation is clearly shown in Figure \ref{fig:multiModalEx}.
+
+\begin{figure}[!h]
+	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_pcolor_meancov_12062014_025}
+                \caption{}
+  	\end{subfigure}
+  	\hspace{2ex}
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_surf_12062014_025}
+                \caption{}
+  	\end{subfigure}
+	\caption{An example of an estimator posterior covariance being larger (in Eastings) due to multi-modality. (a) 2D view of the distribution surface. The mean position is in cyan, the MLE is in magenta, and the $1\sigma$ ellipse is in green.  The small probability weight on the left of the figure, around $(E,N) = (-25, 25)m$, biases the mean position (cyan) left, and increases $\sigma_E$. (b) 3D view of the dsitribution surface.  From this plot, it is clear that the vast majority of probability weight is centered about the MLE peak ($>90\%$).}	
+	\label{fig:multiModalEx}
+\end{figure}
+
+The vast majority of probability mass ($>90\%$) in Figure \ref{fig:multiModalEx} is centered about the MLE peak, but the mean and covariance estimates are affected by a small probabilty mass area roughly $-35m$ Eastings from the MLE.  
+Because this area has such a large moment arm from the mean, $\sigma_E$ is significantly increased due to this small probability mass area.
+This $\sigma_E$ value implies a lower confidence in the Eastings position estimate than the distribution implies, due to the multi-modal nature of the two peaks, highlighting a key difficulty in using these statistics for map-relative localization.
+
+%\subsection{Peak Estimation}
+%\label{framework.Statistics.Peak}
+%
+%TODO

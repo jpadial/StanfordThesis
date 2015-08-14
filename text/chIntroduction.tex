@@ -1,0 +1,562 @@
+% !TEX root = ../thesis.tex
+
+\chapter{Introduction}
+\label{ch.Introduction}
+
+This thesis presents a new method for underwater robotic localization with respect to a prior topography map using sonar imagery.  
+The primary goal of this work is to extend navigation capabilities to enable return-to-site missions and to reduce the need for vehicle re-surfacing, with applicability to both remotely-operated underwater vehicles (ROVs) and autonomous underwater vehicles (AUVs).
+The major technical contribution is the development of a probabilistic measurement model that enables the correlation of acoustic shadows in sonar imagery with a topography map for localization.  
+While techniques based on the correlation of ranging sonar measurements with a topography map have been well-studied, this is the first work that has successfully demonstrated correlation of imaging sonar measurements with topography for accurate position localization.
+
+\section{Motivation}
+\label{intro.Motivation}
+
+The use of sonar imagery for localization with respect to a prior topography map helps to enable missions for which accurate navigation with respect to the seafloor is necessary.  This work is motivated in particular by two classes of robotic missions: return-to-site and long range navigation.
+
+\subsection{Return-to-Site}
+\label{intro.Motivation.Return}
+
+Return-to-site missions involve the navigation of a robotic vehicle to a pre-selected, mapped location.  
+The purpose of return-to-site missions is often data collection in the form of site imaging or sample return for change detection.
+
+The marine science community benefits from return-to-site capabilities, as they enable the repeated observation of marine life and geological features.  
+Repeated observation provides scientists with an understanding of how the undersea environment is changing.  Figure \ref{fig:whalefall} presents the results of a Monterey Bay Aquarium Research Institute (MBARI) return-to-site mission that imaged a whalefall five times over the course of seven years in order to track the biological change.
+
+\begin{figure}[!h]
+	\centering
+		\includegraphics[width=1.0\textwidth]{whalefall}
+	\caption{Return-to-site mission example where a whalefall in the Monterey Bay was imaged five times over the course of seven years.  Image from the Monterey Bay Aquarium Research Institute (MBARI). }
+	\label{fig:whalefall}
+\end{figure}
+
+\subsubsection{Map Geo-Referencing Errors}
+\label{intro.Motivation.Return.Geo}
+
+In order to collect meaningful data on a return-to-site mission, the robotic vehicle must navigate accurately to a desired map location.
+A key challenge to navigation success for return-to-site missions is that maps are often inaccurately geo-referenced.  
+That is, the map is self-consistent but not anchored accurately to world latitude and longitude position.  
+Hence, the pre-selected map location is not in the latitude and longitude position that the map claims.  
+Geo-referencing errors arise due to errors in the navigation system of the mapping vehicle, e.g. an AUV that has drifted during transit from the surface GPS fix to the mapped seafloor location. 
+
+Map-relative localization inherently addresses the geo-referencing problem by estimating vehicle position in a map-relative frame.  
+Provided that the map is self-consistent without significant warping, the map-relative position estimate is agnostic to world positioning.  
+
+\subsection{Long Range Navigation}
+\label{intro.Motivation.Long}
+
+Improved map-relative navigation holds the potential for longer range AUV missions without the need to re-surface for a GPS fix.  
+Especially for missions operating near the seafloor at significant depth, re-surfacing for GPS is problematic, as periodic re-surfacing requires travel to and from the surface.  
+Not only does this periodic re-surfacing add travel time to the mission, but the vehicle position estimate will drift significantly while moving through the water column from the surface to the seafloor.  
+
+\section{Remotely-Operated Vehicle Operation}
+\label{intro.Remotely}
+
+Remotely-operated vehicles (ROVs) are underwater robotic vehicles that are tethered to a surface ship and operated remotely by human pilots.  
+Fiber-optic cabling in the tether provides two-way data communication between pilots on the surface vessel and the ROV.
+ROV missions are primarily used for data collection, whether in the form of imagery or physical samples. 
+The MBARI ROV Doc Ricketts is shown in the left image of Figure \ref{fig:rovs}.
+This vehicle is outfitted with a full sensor suite for inertial navigation and terrain imaging, including a mechanically-scanned imaging sonar (circled in red on the left image of Figure \ref{fig:rovs}). 
+%This vehicle is outfitted with a full sensor suite for inertial navigation and terrain imaging, including an AHRS, DVL, pressure sensor, sonar altimeter, several optical cameras, and a mechanically-scanned imaging sonar (circled in red on the left image of Figure \ref{fig:rovs}). 
+
+An ROV mission profile is a multi-staged operation consisting of deployment, seafloor operation, and re-collection.  
+The ROV is typically deployed from the back deck of a surface vessel, as shown in the right image of Figure \ref{fig:rovs}, after which it descends to the seafloor.
+At the end of the mission, the vehicle tether is re-wound to re-collect the vehicle.
+
+\begin{figure}[!h!]
+	\centering
+	\begin{subfigure}[b]{0.408\textwidth}
+		\includegraphics[width=\textwidth]{DocRicketts}
+		\caption{}
+ 	 \end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.583\textwidth}
+                \includegraphics[width=\textwidth]{VentanaDeployed}
+                \caption{}
+  	\end{subfigure}
+  	\caption{(a) MBARI ROV Doc Ricketts. (b) Deployment of the MBARI ROV Ventana.  Images from mbari.org.}
+  	\label{fig:rovs}
+\end{figure}
+
+Between the time the ROV reaches the seafloor and the start of re-collection, ROV operations need to be as efficient as possible.
+The cost of operation is extremely high, both in the physical assets (surface vessel and ROV) and the human resources involved (crew for safe deployment and recovery, ROV piloting, and surface vessel operation).
+Seafloor time is precious.
+One means of improving operational efficiency is providing the ROV operators with greater navigational awareness.
+
+\section{Autonomous Underwater Vehicle Operation}
+\label{intro.Autonomous}
+
+Autonomous underwater vehicle (AUV) operation varies depending on the type of mission, but in general AUV operation is less costly than ROV operation.
+For missions where the AUV can be deployed from near shore, the use of AUVs obviates the need for a surface ship, which saves considerable expense.
+For missions where a surface vessel is required, e.g. for data collection in the deep sea, cost can still be considerably lower than the comparable ROV mission, as a piloting crew and a real-time control room are unneeded.
+Furthermore, the operation of the tethering infrastructure is no longer needed, saving expense.
+
+AUV designs vary greatly, which in turn affect mission capabilities.  The left image of Figure \ref{fig:auvs} shows an MBARI Dorado-class AUV.  This is a torpedo-style AUV with one actuator in the rear of the vehicle.  These vehicles are optimized for long range operation, with a streamlined design for travel.  The downside of a torpedo-style AUV is maneuverability. The right image of Figure \ref{fig:auvs} shows the MIT Odyssey IV hover-capable AUV.  The hover capability allows the AUV to stop in place, which can be useful for missions requiring careful motion in proximity to terrain or man-made objects (e.g. ship hull inspection). However, the ranges of hover-capable vehicles are, in general, inferior to those of torpedo-style AUVs.
+
+\begin{figure}[!h!]
+	\centering
+	\begin{subfigure}[b]{0.525\textwidth}
+		\includegraphics[width=\textwidth]{dorado}
+		\caption{}
+ 	 \end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.464\textwidth}
+                \includegraphics[width=\textwidth]{MIT_OIV_on_deck_thumb}
+                \caption{}
+  	\end{subfigure}
+  	\caption{(a) MBARI Dorado-class torpedo-style AUV.  Image by Peter Kimball. (b) MIT Odyssey IV hover-capable AUV.  Image from MIT/WHOI. }
+  	\label{fig:auvs}
+\end{figure}
+
+A challenge with using AUVs for underwater missions is developing onboard intelligence, of which accurate and reliable navigation is a key component, especially for the motivating missions of return-to-stie and long range navigation. 
+%As discussed in Section \ref{intro.Existing.Dead}, there are highly accurate inertial navigation systems that limit the accumulation of drift.  
+%However, even the most accurate INS cannot provide accurate map-relative localization for return-to-site missions in the presence of map geo-referencing errors.  
+%Further, for long range navigation an INS solution alone may be insufficient for successful arrival at the destination, especially if the DVL does not maintain bottom-lock throughout the mission, as is the case when the vehicle is moving through the water column, and as can occur due to random events.
+%
+%Terrain-relative navigation (TRN) provides a means of map-relative AUV localization, as outlined in Section \ref{intro.Existing.Terrain}.  
+%While meter-level TRN accuracy has been demonstrated in the field, there are limitations with its success, and opportunities to fully take advantage of the existing sensing commonly found on AUVs.  
+
+\section{Existing Methods for Underwater Localization}
+\label{intro.Existing}
+
+Existing strategies for underwater robotic localization may be broadly classified into the following classes: dead reckoning, acoustic-aided navigation, feature-based navigation, and terrain-relative navigation.  
+An overview for each area is provided in this section.  
+%In particular, limitations of each method are presented with respect to suitability for the motivating missions provided in Section \ref{intro.Motivation}.
+
+\subsection{Localization in the Underwater Environment}
+\label{intro.Existing.Localization}
+
+The high attenuation of electromagnetic signals underwater makes the underwater environment particularly challenging for navigation.
+GPS signals do not penetrate the water column, and as such the widespread localization capability afforded most of the planet is unavailable.  
+Furthermore, the rapid absorption of light makes the use of optical cameras and LIDAR challenging.  
+Underwater vehicles must carry a light source to collect optical imagery and must operate in close proximity to imaged terrain/objects, typically within $5m$.  
+Underwater LIDAR technologies are very recently coming into use and are generating very accurate and high-resolution maps. 
+However, at present maximum LIDAR ranging is limited to $ \sim \hspace{-0.5ex} 30m$.
+
+Acoustic signals are used extensively underwater due to the strong propagation of sound in water.
+In contrast to the limited LIDAR ranging mentioned above, acoustic signals (sonar) can be transmitted over tens to hundreds of kilometers.
+As such, sonar technology is ubiquitous in underwater robotics, used for terrain imaging, positioning/localization, and communication.
+
+However, using acoustic signals for accurate navigation in the underwater environment has its challenges.
+Figure \ref{fig:ainslie}, taken from \cite{Ainslie1998}, highlights two key factors that make the use of acoustic signals for accurate navigation difficult.
+First, the absorption of sound waves is strongly dependent on frequency.  
+This frequency dependence of sound attenuation introduces a trade-off in sonar frequency choice between ranging resolution and maximum range.
+Second, modeling of sonar propagation is strongly dependent on pressure, temperature, and salinity of the water, evidenced by the variation in absorption properties across different bodies of water in the figure.
+Further, these water properes vary greatly by depth, which makes accurate positioning of underwater vehicles from surface vessels difficult.
+
+\begin{figure}[!h]
+	\centering
+		\includegraphics[width=0.9\textwidth]{ainslie}
+	\caption{Sound absorption as a function of frequency for the different bodies of water, from \cite{Ainslie1998}. }
+	\label{fig:ainslie}
+\end{figure}
+
+\subsection{Dead Reckoning}
+\label{intro.Existing.Dead}
+
+Dead reckoning navigation is a class of methods that rely on the integration of inertial velocity and/or acceleration measurements to propagate a position estimate.
+Due to the integral nature of the propagation, steady state error in the position estimate, known as drift, grows over time.
+
+\subsubsection{Inertial Navigation Sensors}
+\label{intro.Existing.Dead.Inertial}
+
+Inertial navigation sensors measure vehicle kinematic states and geophysical properties. 
+Commonly used inertial navigation sensors include pressure sensors, magnetometers, gyroscopes, and accelerometers.  
+Pressure sensors in the underwater environment are used to measure depth.  
+Magnetometers measure the orientation of Earth magnetic North in the body frame.  
+Gyroscopes sense body angular rotation rates.  
+Accelerometers measure body acceleration, generally used to estimate the gravity vector for orientation estimation. 
+The accuracy of sensors vary depending on the underlying process used for obtaining the measurement.  For example, fiber-optic gyroscopes (FOGs) and ring laser gyroscopes (RLGs), both of which operate based on the Sagnac effect \cite{Arditty1981}, are more accurate (and more expensive) than mechanical gyroscopes.
+
+Specific combinations of sensors are commonly packaged for inertial state estimation.  An Inertial Measurement Unit (IMU) typically refers to an instrument package with an accelerometer, gyroscope, and optionally a magnetometer.  The advantage of packaging these sensors together is that errors due to sensor misalignments can be minimized without extensive calibration required of the end-user.  An AHRS (Attitude, Heading and Reference System) refers to a package that fuses accelerometer, gyroscope and magnetometer measurements for attitude and attitude rate estimates.  The key difference between the IMU and the AHRS is that the AHRS uses on-board processing to provide fused attitude and attitude rate estimates, whereas the IMU provides the raw sensory data.
+
+An inertial navigation sensor specific to and commonly used in the underwater environment is the Doppler Velocity Log (DVL).  A DVL uses Doppler shift in successive sonar measurements across four beams to measure velocity relative to a reflecting object.  A DVL provides terrain-relative velocity when the reflecting object is seafloor terrain, or water-relative velocity when the reflecting object is the water column itself.  The four beams of the DVL are typically configured in a Janus configuration, pointed 30 degrees from the local vertical and symmetrically pointed in the plane normal to the local vertical. The least-squares estimation of vehicle velocity using Janus-configuration DVL measurements is detailed in \cite{Brokloff97}.  The left image of Figure \ref{fig:teledyne_explorer} presents an image of the Teledyne RDI Explorer DVL, a miniaturized DVL that has recently come to market.  The right image provides a cartoon illustration of the four DVL sonar beams.
+
+\begin{figure}[!h]
+	\centering
+	\begin{subfigure}[b]{0.45\textwidth}
+		\includegraphics[width=1.0\textwidth]{teledyne_explorer}
+		\caption{}
+         \end{subfigure}
+         \centering
+         \begin{subfigure}[b]{0.42\textwidth}
+         	\includegraphics[width=1.0\textwidth]{dvlCartoon}
+         	\caption{}
+	\end{subfigure}
+	\caption{(a) Teledyne RDI Explorer DVL.  Image from Teledyne RDI.  (b) Illustration of the four DVL beams. Image by Peter Kimball.}
+	\label{fig:teledyne_explorer}
+\end{figure}
+
+\subsubsection{Inertial Navigation System}
+
+An inertial navigation system (INS) is a system that fuses sensory data from Section \ref{intro.Existing.Dead.Inertial} using filtering software to estimate vehicle position and orientation (full six degree of freedom kinematics). INS performance is dependent on the accuracy of the sensors and the quality of the filtering software.  High accuracy gyroscopes, typically fiber-optic gyroscopes (FOGs) or ring laser gyroscopes (RLGs), and high accuracy accelerometers are used in higher perfomance inertial navigation systems.  An example of a high performance INS is the Kearfott SEADeVil KN-6053, with an advertised position accuracy of 0.05\% distance traveled (DT).  The KN-6053 integrates a highly accurate ring laser gyroscope (RLG) with a Teledyne RDI DVL and filtering software for low-drift position estimation. 
+
+\subsection{Acoustic-Aided Navigation}
+\label{intro.Existing.Acoustic}
+
+Acoustic-aided navigation uses acoustic range and potentially bearing from known transponder locations for vehicle localization.  The most common forms of underwater acoustic-aided position systems are Long Baseline (LBL) and Ultra-Short Baseline (USBL) systems.  
+
+\begin{figure}[!h!]
+	\centering
+	\begin{subfigure}[b]{0.49\textwidth}
+		\includegraphics[width=\textwidth]{LBL}
+		\caption{LBL}
+		\label{fig:lbl}
+ 	 \end{subfigure}
+ 	 \hspace{5ex}
+  	\centering
+	\begin{subfigure}[b]{0.43\textwidth}
+                \includegraphics[width=\textwidth]{USBL}
+                \caption{USBL}
+                \label{fig:usbl}
+  	\end{subfigure}
+  	\caption{Acoustic-aided navigation diagrams. (a) Image from AML Oceanographic (b) Image from Sonardyne}
+  	\label{fig:acousticAided}
+\end{figure}
+
+\subsubsection{Long Baseline (LBL) Navigation}
+\label{intro.Existing.Acoustic.LBL}
+
+An LBL system consists of an array of transponders deployed to the seafloor for acoustic-aided navigation over a specific area, as depicted graphically in Figure \ref{fig:lbl}. Once the deployed LBL beacon network is calibrated (often self-calibrated), least squares estimation is employed for position localization using acoustic ranging from the beacons.  In this way, the calibrated LBL array operates in a manner similar to GPS. High accuracy position localization has been demonstrated by LBL systems. For example, the Sonardyne Fusion 6G LBL system advertises centrimetric accuracy.
+
+\subsubsection{Ultra-Short Baseline (USBL) Navigation}
+\label{intro.Existing.Acoustic.USBL}
+
+USBL is a lower-cost acoustic navigation aid that localizes underwater vehicles relative to a surface vessel.  USBL systems measure range and bearing to the underwater vehicle using a short baseline transceiver on the surface vessel, as depicted in Figure \ref{fig:usbl}. Range is measured by time of flight, and bearing is measured by the difference in phase between the reception of the acoustic signal at the multiple transducers in the transceiver.  The position estimate provided by the USBL system is with respect to the surface vessel GPS location.  USBL errors are typically on the order of $5-20m$, with expected errors generally proportional to vehicle depth.
+ 
+%
+%\begin{figure}[!h]
+%	\centering
+%		\includegraphics[width=0.5\textwidth]{USBL}
+%	\caption{USBL operation diagram, image from Sonardyne.}
+%	\label{fig:usbl}
+%\end{figure}
+
+\subsection{Feature-Based Navigation}
+\label{intro.Existing.Feature}
+
+Feature-based navigation has been successfully demonstrated using both optical and sonar image measurements.  
+Borrowing from the field of computer vision, feature-based navigation is typically accomplished by matching interest points across multiple images for correspondence between the images.  Using this correspondence, vehicle pose offsets may be calculated between the two images.  Figure \ref{fig:siftMatches} shows feature matching between two images collected with an MBARI ROV in the Monterey Bay.
+Chapter \ref{ch.RelatedWork} discusses relevant work in the field of feature-based navigation, where there have been many feature-based localization methods successfully demonstrated on real underwater field trials.
+
+\begin{figure}[!h]
+	\centering
+		\includegraphics[width=0.95\textwidth]{underwaterSIFTMatches}
+	\caption{Image feature matching on underwater imagery.  Images collected by an MBARI ROV in the Monterey Bay.}
+	\label{fig:siftMatches}
+\end{figure}
+
+%Image feature technology can be broken into two distinct parts: interest point detection and descriptors.  There are a number of methods for detecting interest points, typically based on detecting corners or blobs in an image.  Similarly, there are many methods for describing the local image information around an interest point, typically involving metrics based on image gradients.  
+
+
+\subsection{Terrain-Relative Navigation (TRN)}
+\label{intro.Existing.Terrain}
+
+Terrain-relative navigation (TRN) is a localization technique that correlates range sensor measurements with a prior topography map.  A great deal of work has been devoted to underwater TRN in the last decade, with accuracy on the order of map resolution demonstrated (i.e. meter-level accuracy for a meter-resolution terrain map).  Chapter \ref{ch.RelatedWork} will provide an overview of past work in TRN.
+
+At a fundamental level, all existing TRN techniques are based on sliding a range return profile over a topography map to estimate a likelihood surface of vehicle position, as depicted in Figure \ref{fig:trnCartoon}.  The left image in the figure illustrates an AUV with multiple range measurements (yellow beams).  The right figure shows the position likelihood surface in yellow that results from sliding the multibeam sonar return over the topography map.  
+
+\begin{figure}[!h]
+	\centering
+		\includegraphics[width=1.0\textwidth]{trnCartoon}
+	\caption{Terrain-relative navigation concept diagram.  The left image denotes an AUV with a multibeam sonar profile return.  The right image denotes the position likelihood surface in yellow resulting from correlating the sonar profile with the map.  Image courtesy Peter Kimball.}
+	\label{fig:trnCartoon}
+\end{figure}
+
+Figure \ref{fig:trnCartoon} illustrates a fundamental challenge in TRN: multi-modality that arises from self-similarity of natural terrain.  In the right image of the figure, note the multiple bumps in the yellow likelihood surface.  The multi-modal nature of TRN necessitates sophisticated estimation/filtering techniques to provide accuracy and robustness, as discussed in Chapter 2.
+
+\subsubsection{Prior Topography Maps}
+\label{intro.Existing.Terrain.Prior}
+
+The availability of a prior topography map is necessary for TRN. Much of the underwater seafloor environment is mapped, though a large portion of the maps are at a low resolution (on the order of tens of meters). This is due to the mapping process, as many available maps were created from ship-based sonar returns.  Dependent on the terrain depth and the sonar beam width, resultant map resolution is limited.
+
+High resolution ($0.1-5m$) topography maps are increasingly available around the world with the explosion of underwater robotics.  
+Maps created using ROVs and AUVs are capable of generating significantly higher resolution maps as compared to ship-based maps due to the increased proximity to the terrain.  
+Figure \ref{fig:gofMap} provides an image of a $1m$ resolution seafloor topography map of a Gulf of California site created from an AUV equipped with a RESON 7125 200kHz multibeam sonar.
+
+\begin{figure}[!h!]
+	\centering
+		\includegraphics[width=0.6\textwidth]{gofMap}
+	\caption{Seafloor topography map of a Gulf of California site at 1-m resolution, generated from an AUV mission conducted by Dave Caress at MBARI with MB-System software.}
+	\label{fig:gofMap}
+\end{figure}
+
+\subsubsection{Ranging Sensors}
+\label{intro.Existing.Terrain.Ranging}
+
+There are many ranging sensors available in the underwater environment that may be used for TRN, foremost being: DVL, multibeam sonar, interferometric sidescan sonar, and LIDAR.
+
+As discussed in Section \ref{intro.Existing.Dead.Inertial}, DVL is primarily used in underwater robotics for measurement of terrain-relative velocity.  Doppler shift is measured in the sonar returns of four beams.  However, the ranging measurements from these beams may also be used for TRN correlation. A benefit of using DVL for TRN is that DVLs are carried on nearly every underwater vehicle (ROV and AUV) for inertial velocity measurement.
+
+Multibeam sonar systems provide significantly more ranging capabilities than DVL.  
+Multibeam sonars use projector and hydrophone arrays to direct multiple beams of acoustic energy in specific directions.
+Typical multibeam sonars ensonify terrain with a horizontal fan-width of $90-150^{o}$, with vertical fan width of $1-3^{o}$.
+Beam-picking algorithms are used to estimate the range in each beam direction from the returned acoustic signal.
+The advantage of multibeam sonar use is the high ranging information gain.
+Key limitations to multibeam use are typically weight, power consumption, and cost.
+
+Ranging may also be provided by interferometric sidescan sonar.  
+Non-interferometric sidescan sonar records intensity information with a single-beam that is wide in elevation angle and narrow in azimuth angle.
+Interferometric sidescan sonar systems have multiple transducers in an array that use interferometry to infer 3D topography from reflected signal.
+They are typically more expensive and consume more power than non-interferometric sidescan sonars, but offer co-registered topography with sidescan sonar imagery.
+
+LIDAR is an emerging technology for underwater ranging.  
+The right image of Figure \ref{fig:3datdepth} presents a mapping result using a subsea LIDAR developed by 3D at Depth (\emph{www.3datdepth.com}).
+The image demonstrates the very high ranging resolution and accuracy offered by LIDAR solutions.
+The current limitations on the use of LIDAR systems are related to their high power consumption, high cost, and low maximum range (attenuation of electromagnetic energy in water).
+
+\begin{figure}[!h!]
+	\centering
+	\begin{subfigure}[b]{0.565\textwidth}
+		\includegraphics[width=\textwidth]{3datdepth_green}
+		\caption{}
+ 	 \end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.41\textwidth}
+                \includegraphics[width=\textwidth]{3datdepth_boat}
+                \caption{}
+  	\end{subfigure}
+  	\caption{3D at Depth subsea LIDAR sensor and image. (a) SL1 subsea LIDAR in operation. (b) Sunden rowboat mapped using the subsea LIDAR. Images from 3D at Depth (\emph{www.3datdepth.com}). }
+  	\label{fig:3datdepth}
+\end{figure}
+
+\section{Limitations of Existing Localization Methods}
+\label{intro.Limitations}
+
+For the motivating missions of return-to-site and long range navigation there are opportunities to improve over existing localization methods.
+As discussed in Section \ref{intro.Motivation}, the ability to supply an underwater vehicle with a \emph{map-relative} position estimate is essential for return-to-site missions, and is an enabling technology for long range navigation without periodic re-surfacing.
+
+Due to map geo-referencing errors, which are common for high-resolution maps built from underwater vehicle measurements, as described in Section \ref{intro.Motivation.Return.Geo}, the following existing localization methods are \textbf{incapable} of reliably providing map-relative position estimation:
+
+\begin{itemize}
+\item \textbf{Dead Reckoning (Section \ref{intro.Existing.Dead})}: Dead Reckoning localization integrates inertial sensor measurements from some starting location. 
+Since there is no exteroceptive terrain sensing, there is no ability to correlate measurements against mapped terrain features in order estimate a map geo-referencing error.
+\item \textbf{USBL (Section \ref{intro.Existing.Acoustic.USBL})}: Similar to Dead Reckoning, acoustic ranging from a surface vessel has no ability to correlate measurements against mapped terrain features. Even if USBL positioning were accurate, where in reality errors of $5-20m$ are common, USBL provides a GPS-relative position estimate, not a map-relative estimate.
+\end{itemize}
+
+Map-relative position estimation may be accomplished through the use of LBL, feature-based localization, or TRN.
+However, each method has limitations in terms of applicability to the motivating missions of return-to-site and long range navigation:
+
+\begin{itemize}
+\item \textbf{LBL (Section \ref{intro.Existing.Acoustic.LBL})}: The limitations of LBL are related to cost and availability.  First of all, deploying LBL infrastructure is expensive.  The systems themselves are costly, and then there is the added expense of deploying the beacons from a surface vessel and overseeing calibration.  Second, the LBL array only provides localization for the area in which the beacons are deployed. As such, LBL localization has limited applicability for return-to-site and long range navigation missions.
+
+\item \textbf{Feature-based localization (Section \ref{intro.Existing.Feature})}: Feature-based navigation with optical imagery is limited by the strong absorption of light in water, which imposes a requirement on vehicle proximity to the terrain of typically $5m$ or less.  
+This requirement on proximity means that the imaged terrain area is small, on the order of a few square meters, which limits the usefulness of optical imaging for map-relative localization.
+\\ \\
+Feature-based navigation with sonar imagery has limited utility for the following reasons:
+
+\begin{enumerate}
+\item Prior sonar image feature maps are not nearly as available as prior topography maps.
+\item The deformation of terrain features according to viewing angle makes localization with respect to prior features extremely difficult.  
+This issue is mathematically detailed in \cite{Rikoski2005}, and is more thoroughly discussed in Chapters \ref{ch.RelatedWork} and \ref{ch.SonarImagery}.
+\end{enumerate}
+
+\item \textbf{TRN (Section \ref{intro.Existing.Terrain})}: TRN performance has been shown to suffer when sensed terrain information is too low \cite{Dektor2012}.  
+The amount of sensed terrain information can be too low for the following reasons:
+
+\begin{enumerate}
+\item \textbf{Locally flat terrain underneath the vehicle}: TRN operates by correlating actual range measurements with expected range measurements generated from a topography map and position estimate.  If the map is perfectly flat, then there will be no way to disambiguate horizontal position because all of the expected range measurements will be the same across position estimates.
+\item \textbf{Low vehicle altitude}: As vehicle altitude is decreased, the amount of sensed terrain is decreased.  As such, TRN estimators have less information with which to estimate vehicle position.
+\item \textbf{Not enough distance traveled}: When using ranging sensors commonly found on ROVs and AUVs (DVL, multibeam sonar), TRN convergence relies on sequential ranging measurements collected over time as the vehicle travels over terrain in order to sense terrain information.  If the vehicle does not travel over enough terrain, then TRN will not converge.
+\end{enumerate}
+
+\end{itemize}
+
+The limitations of existing localization methods as specifically applicable to ROV and AUV operations are overviewed in the following sections.
+
+\subsection{Localization Limitations with Existing Technology for ROV Operations}
+\label{intro.Remotely.Limitations}
+
+Today ROV localization is typically accomplished by a combination of acoustic ranging and pilot interpretation of sonar imagery for map-relative localization.  
+USBL is commonly used for obtaining an ROV position estimate relative to the surface vessel GPS location.
+However, as discussed, USBL does not provide a map-relative position estimate due to geo-referencing errors.
+
+In order to gain map-relative situational awareness, ROV pilots often interpret sonar imagery to infer map-relative vehicle position.  
+Sonar imagery is used because it is high in information content.
+However, as discussed more thoroughly in Chapter \ref{ch.SonarImagery}, the sonar image domain is a challenging measurement domain with which to work.
+As such, while ROV pilots are highly skilled at using sonar imagery to locate features of interest for navigation, this is a challenging task, especially under time pressure. 
+It has been observed that it can take upwards of an hour to navigate to a site within $10m$ of the ROV starting location. 
+
+As ROVs typically have ranging sensors onboard such as a DVL and (maybe) a multibeam sonar, it would appear that TRN could be applied to ROV operations to aid map-relative navigation.  However, the applicability of TRN use for typical ROV operations is limited for the following reasons:
+
+ \begin{enumerate}  
+ \item ROVs typically operate at low altitudes above the seafloor.
+ \item Due to the ROV tether, ROVs cannot travel over the distances typically required for TRN convergence using downward-looking range sensors.
+ \end{enumerate}
+ 
+\noindent \textbf{OPPORTUNITY}: There is an opportunity to develop a new capability to use onboard sonar imagery measurements in order to estimate ROV position with respect to a prior topography map.
+
+\subsection{Localization Limitations with Existing Technology for AUV Operations}
+\label{intro.Autonomous.Limitations}
+
+For AUV operations at lower altitudes, and especially operating over locally flat terrain, TRN will suffer as previously discussed. 
+The drop in TRN performance will be exacerbated by having a downward-looking range sensor with fewer beams, such as a DVL (as opposed to a 512-beam multibeam sonar).
+
+In addition to ranging sensors, AUVs typically have a sidescan sonar onboard for sonar image data collection, which operate best at lower altitudes (usually the best operation is at an altitude $\sim 10 \%$ of maximum range).
+As detailed in Chapter \ref{ch.SonarImagery}, sidescan sonar imagery measurements typically sense a large swath of terrain on either side of the vehicle ($100m-1km$).
+
+Feature-based localization methods using sonar image measurements can be employed for improved navigation.
+However, as previously discussed, the deformation of terrain features from differing viewpoints makes application of these methods challenging for map-relative localization (and the availability of prior feature maps is far lower than that of topography maps).
+\\ 
+
+\noindent \textbf{OPPORTUNITY}: There is an opportunity to develop a new capability to use sonar imagery measurements in order to estimate AUV position with respect to a prior topography map.
+The high information content of the sonar image measurements could augment TRN performance when operating at low altitudes and/or over locally flat terrain (but with side-looking terrain information available).
+
+%\subsection{Long Range Navigation}
+%
+%Long range AUV navigation is not solved by dead reckoning alone.  For a 100 kilometer mission with a Kearfott KN-6053 perfoming as advertised, a drift error of roughly 50 meters is to be expected.  However, if bottom-lock is lost with the DVL for any amount of time, that estimate will drift significantly more.  For example, if the AUV had to descend from the surface through the water column for any significant depth, the position estimate will be corrupted by drift error greater than 0.05\% DT.  Furthermore, the cost of a high accuracy INS can be prohibitively high for many vehicles/missions.  As an example, the Kearfott SEADeVil costs roughly \$300K (in 2004).
+
+\section{Approach}
+\label{intro.Approach}
+
+This thesis presents a new method to correlate sonar imagery with a topographical map for position localization. 
+The use of sonar imagery for localization with respect to a prior topography map helps to enable missions for which accurate navigation with respect to the seafloor is necessary.  
+This work is motivated in particular by two classes of robotic missions: return-to-site and long range navigation.
+
+At a high-level, the approach is identical to that of TRN, with the replacement of range sensor measurements by imaging sonar measurements, as depicted graphically in Figure \ref{fig:approach}. 
+
+\begin{figure}[!h]
+	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{IntroApproach}
+                \caption{TRN}
+  	\end{subfigure}
+  	\hspace{2ex}
+  	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+                \includegraphics[width=\textwidth]{IntroApproach2}
+                \caption{Thesis Approach}
+  	\end{subfigure}
+	\caption{High-level comparison of TRN and the approach presented in this thesis. The thesis approach replaces ranging sonar measurements with imaging sonar measurements. }	
+	\label{fig:approach}
+\end{figure}
+
+At a lower level, acoustic shadows in sonar imagery are correlated with expected shadows generated from a vehicle pose estimate and a prior topography map.  
+The calculation of expected shadows is accomplished using a \emph{measurement model} that is a new contribution of this doctoral work.
+To better understand why acoustic shadows are chosen as the information source in sonar imagery, the following section provides a brief introduction to sonar imagery (see Chapter \ref{ch.SonarImagery} for greater depth).
+
+\subsection{Sonar Imagery}
+\label{intro.Sonar}
+
+Imaging sonars are typically attractive for their large area ensonification with relatively low SWaP (size, weight, and power) and low cost as compared to other sensors with similar terrain ensonification (e.g. multibeam ranging sonar).
+As such, they are used widely.
+
+Imaging sonars may be divided into three main types: mechanically-scanned imaging sonars, multibeam imaging sonars, and sidescan sonars.
+While sidescan sonars are not always referred to as ``imaging sonars'', the underlying measurement process is the same as that of mechanically-scanned and multibeam imaging sonars, and as such in this work they are considered to be part of the broader ``imaging sonar'' family.
+
+\begin{figure}[!h]
+	\centering
+	\begin{subfigure}[b]{0.547\textwidth}
+                \includegraphics[width=\textwidth]{sonarElevationUnknown}
+                \caption{Sonar image formation}
+                \label{fig:sonarElevationUnknown}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.443\textwidth}
+                \includegraphics[width=\textwidth]{SonarImageAzRange}
+                \caption{Sonar image}
+                \label{fig:sonarImageRAz}
+  	\end{subfigure}
+	\caption{Sonar image diagrams. (a) Sonar fan-shaped pulse is red and the sonar transducer origin is $S_o$. The azimuth angle (az) and range (r) of an intensity return from a terrain point (yellow circle) is known, but the elevation angle (el) is unknown. (b) In the sonar image, range is radial distance from the origin and azimuth is the angle from the up direction (vehicle forward).}	
+\end{figure}
+
+Imaging sonars measure reflected acoustic signal intensity versus time of flight over a span of azimuth angles.
+At each azimuth angle, the sonar transducer emits a fan-shaped pulse of acoustic energy that is narrow in azimuth angle and wide in elevation angle, as depicted in the red fan of Figure \ref{fig:sonarElevationUnknown}.
+The sensor then records intensity of the reflected acoustic signal as a function of time of flight.
+The time of flight is usually converted to metric range with an estimate of the local sound speed.
+Figure \ref{fig:sonarImageRAz} shows a polar sonar image, labeling the range and azimuth dimensions of the image for a particular intensity pixel.
+
+There is an unavoidable ambiguity in extrapolating spatial information from sonar imagery due to the undetermined spatial content of the signal, and this ambiguity makes the sensory data difficult to use for quantitative navigation purposes.  
+Specifically, the azimuth angle and range of a given intensity return are known, but the elevation angle is unknown, as depicted in Figure \ref{fig:sonarElevationUnknown}.
+Conversely, for ranging sonar measurement the azimuth angle, range, and elevation angle are all known (known 3-D position relative to the sonar transducer).
+
+Forming a measurement model for sonar image intensity as a function of vehicle pose and topography alone is ill-defined, as intensity values depend on \cite{Bell1995}:
+
+\begin{itemize}
+\item Topography
+\item Surface reflectance properties (composition)
+\item Water properties (e.g. salinity)
+\item Sensor gains and filters
+\end{itemize}
+
+\noindent As such, predicting the intensity signal accurately requires more than a vehicle pose estimate and topography map alone. 
+
+\subsection{Acoustic Shadows in Sonar Imagery}
+\label{intro.Shadows}
+
+Acoustic shadows, which are significant drops in sonar image intensity, are determined primarily by \emph{line-of-sight occlusion} due to the geometry of ensonified terrain relative to the sonar transducer, and are therefore well-suited to topography-based correlation.
+Figure \ref{fig:shadows_561_3} provides an example of acoustic shadows from geometric occlusion caused by a boulder in natural terrain in the Monterey Bay.  
+The top left image shows the measured sonar image, collected by a mechanically-scanned imaging sonar.
+The top middle image shows acoustic shadows of the measured image.
+The large shadow regions in the upper portion of the image are caused by a terrain boulder.
+
+\begin{figure}[!h]
+  	\centering
+	\begin{subfigure}[b]{0.3\textwidth}
+                \includegraphics[width=\textwidth]{meas_561_3_c_bright}
+                \caption{Sonar Image}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.3\textwidth}
+                \includegraphics[width=\textwidth]{measBinary_561_3_c}
+                \caption{Actual Shadows}
+  	\end{subfigure} 	
+	\begin{subfigure}[b]{0.3\textwidth}
+                \includegraphics[width=\textwidth]{rvisprobs_nocolorbar_561_3_c}
+                \caption{Expected Shadows}
+  	\end{subfigure}
+  	
+  	\centering
+	\begin{subfigure}[b]{0.45\textwidth}
+                \includegraphics[width=\textwidth]{map_561_3}
+                \caption{Topography Map}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.5\textwidth}
+                \includegraphics[width=\textwidth]{rPMF_surf_561_3}
+                \caption{Position Prob. Distribution}
+  	\end{subfigure}
+  	
+	\caption{Maximum likelihood (ML) position estimate using acoustic shadows from a terrain boulder. (a) Measured sonar image (sonar image top is vehicle forward). (b) Acoustic shadows from measured sonar image. (c) Expected shadows for ML estimated vehicle position (blue is higher probability of shadow). (d) Topography map with ML position (red dot) and vehicle forward direction (red arrow). (e) Position probability distribution, where the ML position is the peak location. }	
+	\label{fig:shadows_561_3}
+\end{figure}
+
+Additionally shown in Figure \ref{fig:shadows_561_3} are the results of position estimation using the measured acoustic shadows and the estimator presented in this thesis.
+The bottom left image shows the topography map and the maximum likelihood (ML) position estimate, where the shadows in the upper middle plot are plausibly formed by geometric occlusion due to the large boulder.
+The upper right image is the expected shadow measurement for the ML position, where blue indicates a higher probability of shadow.
+The alignment of the upper blue shadow region in the expected measurement with the upper black shadow region of the measured shadow image is a qualitative validation of the ML position.
+The bottom right plot shows the output of the estimator: the probability distribution over map-relative positions.
+The ML position corresponds to the peak in the distribution.
+How the estimator uses measured shadows to output the position distribution is the central contribution of this thesis.
+
+\section{Contributions}
+\label{intro.Contributions}
+
+The localization approach presented in this thesis is usable for both stationary and moving underwater vehicles.  
+Within the context of this thesis, the methodology for stationary vehicles is applied to remotely-operated vehicles. 
+ROV field trials using mechanically-scanned imaging sonar demonstrate meter-level position estimation using a single sonar image. 
+The methodology for moving vehicles is similar to that for stationary vehicles, but motion changes the estimator design.  
+AUV field trials using sidescan sonar demonstrate meter-level position estimation using sequential sonar measurements made as the vehicle moves.
+\\
+
+\noindent The contributions of this thesis are as follows:
+
+\begin{enumerate}
+	\item Development of a probabilistic measurement model for sonar image visibility given a topographical terrain map and a vehicle pose
+	\item Development of sampling-based position estimator frameworks using acoustic shadows from sonar image measurements for map-relative localization of both stationary and moving underwater robotic vehicles
+	\item Demonstration of a meter-level terrain-relative localization capability on field data collected by an ROV equipped with mechanically-scanned imaging sonar
+	\item Demonstration of a meter-level terrain-relative localization capability on field data collected by a torpedo-style AUV equipped with sidescan sonar 
+\end{enumerate}
+
+\section{Roadmap}
+
+The thesis is organized as follows:
+
+\begin{itemize}
+  \item \textbf{Chapter \ref{ch.RelatedWork}. Related Work} An overview of related work in underwater navigation is presented.  In particular, prior works in map-relative localization with feature-based techniques using sonar imagery and Terrain-Relative Navigation (TRN) methods using range sensors are presented.
+  \item \textbf{Chapter \ref{ch.SonarImagery}. Sonar Imagery: Why Use Shadows?} Sonar imagery is described in detail.  The types of imaging sonar, uses of sonar imagery, and measurement process are detailed.  The reasons why acoustic shadows are chosen as the information source for localization are presented.
+  \item \textbf{Chapter \ref{ch.Framework}. Localization Framework} The map-relative position estimation framework is described.  Specifically, Bayesian estimators for two cases are detailed: (1) a motionless case where the vehicle remains in a fixed position during sonar image measurement (typically applicable to ROV missions), and (2) a motion case where the vehicle is moving during sonar image measurement (typically applicable to AUV missions).  The form of the measurement likelihood function for the use of acoustic shadow information in sonar imagery is key to the estimation process, and is presented here.
+  \item \textbf{Chapter \ref{ch.MeasurementModel}. Visibility Measurement Model} The probabilistic visibility measurement model is presented.  The measurement model calculates the probability that a pixel in a sonar image is visible (i.e. not in acoustic shadow) given a vehicle pose estimate and a topography map.  This model is necessary for evaluation of the measurement likelihood outlined in Chapter \ref{ch.Framework}.
+  \item \textbf{Chapter \ref{ch.ROV}. Remotely-Operated Vehicle Field Results} Field results are presented that demonstrate meter-level map-relative position localization for a stationary underwater vehicle.  Field data were collected with a remotely-oerated vehicle (ROV) equipped with a mechanically-scanned imaging sonar.  Localization was accomplished for each trial using a single sonar image.
+  \item \textbf{Chapter \ref{ch.AUV}. Autonomous Underwater Vehicle Field Results} Field results are presented that demonstrate meter-level map-relative position localization for a moving underwater vehicle.  Field data were collected with an autonomous underwater vehicle (AUV) equipped with a sidescan sonar.  Localization was accomplished using a time series of sidescan sonar measurements over multiple timesteps.
+  \item \textbf{Chapter \ref{ch.Conclusions}. Conclusions and Future Work} The contributions of the thesis are summarized and areas for future work are discussed.
+\end{itemize}

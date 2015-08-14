@@ -1,0 +1,61 @@
+% !TEX root = ../thesis.tex
+
+\prefacesection{Abstract}
+
+Robotics enable operations in the underwater environment that are otherwise infeasible or impossible.
+Applications of underwater robotic vehicles include scientific exploration and monitoring, inspection and repair of undersea infrastructure, and archaeology.
+Underwater robotic technologies can be classified broadly into remotely-operated vehicles (ROVs) and autonomous underwater vehicles (AUVs).
+ROVs are tethered to a surface ship and operated by human pilots that monitor the sensory information collected by the vehicle in order to perform missions, whereas  AUVs are untethered vehicles that do not require a surface vessel.
+
+ROVs are widely used for many underwater missions.
+A benefit of using an ROV over an AUV is that human pilots are able to make operational decisions based on new sensory information in ways that remain challenging for autonomous systems.
+However, a key limitation with ROV use is cost.
+ROV operations require the physical and human resources necessary to operate a surface vessel, deploy and re-collect the ROV from the ship deck, and monitor and control the ROV remotely.  
+As such, ROV operations need to be as time-efficient as possible.
+Improving ROV navigational capabilities is a key means of improving operational time efficiency.
+
+AUVs are increasingly used for underwater missions for a host of reasons.
+AUV operation is typically less expensive than ROV operation, as the use of AUVs often obviates the need for a surface ship.
+Even if a surface ship is used, fewer physical and human resources are required to operate the vehicle as it is autonomous during operations.
+Further, AUVs are capable of comparatively long-term, persistent operation, and can travel far greater distances due to the lack of a tether.
+However, the challenge with transitioning from ROV operations to AUV operations is that AUVs require a higher level of onboard intelligence, as there is no human pilot.
+Accurate and reliable navigation is a key component of the onboard intelligence necessary for reliable AUV use.
+
+Accurate and reliable navigation is a challenge in the underwater environment.
+While the Global Positoning System (GPS) has enabled widespread and reliable localization capabilites for most of the planet, it is unavailable in the underwater environment.
+This is due to the severe attenuation of GPS signals (electromagnetic waves) in water.  
+As such, navigation through other means is necessary.
+
+Map-relative navigation is a powerful means of localization in the underwater environment.  
+Localization is accomplished by correlating sensor measurements with a prior map. 
+The map may take many forms, including topographical, landmark-based, or geomagnetic.
+The sensor measurements may come from a variety of sources, including ranging sensors (e.g. LIDAR or ranging sonar), optical cameras, or magnetometers.
+
+Map-relative navigation is particularly useful for return-to-site missions and long-range seafloor travel.  
+Return-to-site missions involve the return of a robotic vehicle (ROV or AUV) to a previously mapped area of the seafloor.  
+Return-to-site capability is useful for the marine science community, as it enables the repeated observation of marine life and geological features.  
+The ability to localize the robotic vehicle with respect to the prior map is key to this return-to-site capability. 
+Long-range AUV seafloor missions also benefit from map-relative navigation by mitigating inertial navigation drift. In so doing, an AUV may stay submerged without the need to re-surface for a GPS fix.
+
+Terrain Relative Navigation (TRN) is an emerging map-relative localization technique.  
+TRN methods use a topography map of natural terrain and a ranging sensor. 
+TRN has been shown to be capable of providing accuracy on the order of the map resolution, dependent on the amount of terrain information sensed.
+One limitation of existing TRN methods is that when the terrain is locally flat beneath the vehicle there is not enough terrain information for accurate position estimation.
+This limitation is exacerbated at lower altitudes, where the amount of terrain information sensed by downward-looking range sensors is decreased.
+Another limitation for application to ROV operation is that TRN, using ranging sensors typically found on ROVs, generally requires vehicle motion for position convergence.
+This requirement for motion is problematic for ROVs due to the tether and nature of ROV operation.
+
+Imaging sonars have the potential to address these TRN limitations for ROV and AUV operations.  In this work the term ``imaging sonar'' broadly refers to mechanically-scanned and multibeam imaging sonars, as well as sidescan sonars.
+Imaging sonars are ubiquitous in underwater robotics due to typically large terrain-area ensonification (high information gain), with low power consumption and low cost as compared to ranging sonars with comparable terrain ensonification, e.g. multibeam sonars.
+ROVs typically carry a mechanically-scanned (or multibeam) imaging sonar used by the human pilots to look for terrain features or potential hazards.
+AUVs typically carry a sidescan sonar for terrain imaging.
+There has been a large body of work devoted to feature matching with imaging sonars for navigation, with many successful localization results demonstrated in the field.
+However, these feature matching methods have limitations due to the nature of the sonar image domain.
+Specifically, sonar image features deform according to viewing angle, and thus as heading of the vehicle between imaging sites varies the feature matching problem becomes ill-posed.
+
+This thesis shows that by using the acoustic shadows in the sonar image, however, sonar imagery can be correlated with expected shadows from topography for accurate position estimation.
+The use of imaging sonar for localization with respect to prior topography maps has not been demonstrated previously.
+This is due to the difficulty in relating the intensity values in a sonar image to topography.
+However, acoustic shadows in sonar imagery are primarily \emph{geometric} in nature, and as such are well-predicted from a topography map and vehicle pose estimate.
+
+This thesis addresses the limitations outlined with respect to existing ROV and AUV map-relative navigation methods by presenting a new method to correlate sonar imagery with a topographical map for position localization. Specifically, acoustic shadows in sonar imagery are correlated with expected shadows calculated using a probabilistic measurement model.  By developing a method for the correlation of sonar imagery with topography for position localization, this work enables improved terrain-relative localization for ROV operation, which holds the potential to reduce ROV operation costs by allowing for faster navigation to sites of interest.  Further, the application of this new method to sidescan sonar on AUVs enables localization in areas where existing TRN suffers.

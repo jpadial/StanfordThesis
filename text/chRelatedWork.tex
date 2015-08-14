@@ -1,0 +1,287 @@
+% !TEX root = ../thesis.tex
+
+\chapter{Related Work}
+\label{ch.RelatedWork}
+
+Localization for underwater vehicles is an enabling capability for a wide array of underwater robotic missions, and as such there has been a wealth of research and development in this field.
+Highly relevant to this work are advances in the fields of Terrain-Relative Navigation (Section \ref{related.TRN}) and feature-based localization with optical and sonar imagery (Section \ref{related.Feature}).
+
+This thesis presents a new way to use shadow information in sonar imagery for position localization with respect to a seafloor topography map, and there have been many past works that are relevant with respect to this methodology.
+The field of Shape-from-Shaping (Section \ref{related.SfS}) has produced a wealth of methods to estimate topographical features from intensity imagery.
+In addition, there have been many works that use shadow information for localization and/or mapping (Section \ref{related.Shadow}).
+While relevant to this work, the Shape-from-Shading and mapping-from-shadows works are, in general, solving the inverse problem as that of this thesis.
+That is, these past works are attempting to extrapolate geometrical spatial information \emph{from} intensity images, whereas this thesis is projecting geometrical spatial information \emph{into} the image domain (see Chapters \ref{ch.SonarImagery}, \ref{ch.Framework}, and \ref{ch.MeasurementModel} for detail).
+
+Past works that use ``signals of opportunity'' in radar localization (Section \ref{related.Signals}) are also relevant to this work in terms of the spirit of the methodology.
+``Signals of opoortunity'' are commonly avaialable signals (e.g. television broadcasts) that have been used for localization, even though they were not designed to do so.
+The use of acoustic shadow data in sonar imagery is very similar in nature, where these shadow data are ``signals of opportunity'' that can be used with imaging sonars already commonly run on underwater vehicles in order to enable or enhance topography-relative localization capabilities.
+
+
+\section{Underwater Terrain-Relative Navigation (TRN)}
+\label{related.TRN}
+
+Terrain-relative navigation (TRN), as introduced in Section \ref{intro.Existing.Terrain}, is a class of localization techniques that correlates range sensor measurements with a prior topography map.
+Localization accuracy on the order of map-resolution has been demonstrated with TRN, and there exists a rich literature on the subject.
+The following sections provide an overview of past works in TRN with respect to batch and recursive estimation techniques.
+
+\subsection{Batch TRN}
+\label{related.TRN.Batch}
+
+TRN has been accomplished successfully through batch methods.
+The first TRN method implemented was a batch scheme, called TERCOM, developed in the early 1980s for cruise miissile guidance.
+TERCOM correlated a time-series of radar altimeter measurements with a stored topography map \cite{Golden1980}, where the estimated vehicle position had the smallest mean absolute difference (MAD) between actual measurements and expected measurements.
+In the doctoral work of Bergem, the TERCOM scheme was adapted for underwater vehicles using a multibeam sonar for terrain measurements \cite{Bergem1993}.
+
+Nygren developed a batch TRN method based on a Maximum Likelihood (ML) estimation scheme \cite{Nygren2004},\cite{Nygren2005}.
+Nygren demonstrated this ML batch TRN method using a 400-beam area sonar on an AUV in \cite{Nygren2008}.
+Figure \ref{fig:nygren} presents a diagram of the 400-beam area sonar.  
+
+\begin{figure}[!h!]  	
+	\centering
+	\begin{subfigure}[b]{0.5\textwidth}
+		\includegraphics[width=\textwidth]{Nygren2008_400beam}
+		\caption{400-beam area sonar diagram}
+ 	 \end{subfigure}
+  	\centering
+  	
+	\centering
+	\begin{subfigure}[b]{0.32\textwidth}
+                \includegraphics[width=\textwidth]{Nygren2008_Likelihoods3}
+                \caption{1 beam}
+                \label{fig:nygren1}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.32\textwidth}
+                \includegraphics[width=\textwidth]{Nygren2008_Likelihoods1}
+                \caption{9x9 beams}
+  	\end{subfigure}
+  	\centering
+	\begin{subfigure}[b]{0.32\textwidth}
+                \includegraphics[width=\textwidth]{Nygren2008_Likelihoods2}
+                \caption{19x19 beams}
+                \label{fig:nygren19}
+  	\end{subfigure}
+  		
+  	\caption{Images from \cite{Nygren2008}. (a) 400-beam area sonar diagram. (b) Likelihood surface with 1 measurement beam. (c) Likelihood surface with 9x9 beam area sonar. (d) Likelihood surface with 19x19 beam area sonar.}
+  	\label{fig:nygren}
+\end{figure}
+
+Typically, the success of batch TRN estimation relies on a highly accurate INS and/or a dense range sensor.
+That is, the motion between measurements must be known very well (assumed to be exact knowledge).
+The highly accurate INS system is required by the TERCOM system, for example, in order to provide the motion estimate between radar altimeter measurements.
+Without this highly accurate INS, the estimated motion profile would be distorted by un-modeled motion noise.
+A dense range sensor, such as the 400-beam area sonar used by Nygren, can sense enough terrain information in a single measurement for successful estimation.
+The likelihood surfaces shown in Figure \ref{fig:nygren} from \cite{Nygren2008} demonstrate the effect of increased terrain sensing on estimate convergence. 
+With a 1-beam measurement the likelihood surface is highly multi-modal in Figure \ref{fig:nygren1}, and with a 19x19 beam measurement the likelihood surface is converged to a uni-modal peak in Figure \ref{fig:nygren19}.
+
+A batch localization method for the correlation of sonar imagery with a prior topography map is presented in this thesis, and is similar in nature to the area-based sonar work of Nygren.
+As described in Section \ref{framework.Motionless} for the batch case, a single sonar image is used for position estimation, where a single sonar image can sense enough terrain information for position estimation (similar to the 400-beam area sonar).
+The key difference between prior batch TRN methods (e.g. Nygren's) and the work presented in this thesis is that prior works employed range sensors, whereas this thesis uses sonar imagery for correlation with a topography map.
+As discussed in Section \ref{intro.Sonar}, imaging sonars provide a fundamentally different measurement than ranging sensors (e.g. multibeam sonar), and as such a new methodology for correlation with a prior terrain topography map is required.
+
+\subsection{Recursive TRN}
+\label{related.TRN.Recursive}
+
+In order to estimate the full map-relative position distribution of a moving AUV over time, recursive Bayesian TRN estimator solutions have been developed with great success.
+Recursive estimators can overcome the limitations of batch estimators (requiring a highly accurate INS and/or dense range sensor) by probabilistically modeling vehicle motion between measurements.
+While closed form solutions exist for recursive estimators under Gaussian (uni-modal) assumptions, TRN is marked by nonlinear motion and measurement models, along with multi-modality in the underlying state distribution due to terrain self-similarity, and as such is not well-suited to exact solutions (e.g. Kalman Filter).
+Instead, work in underwater TRN has focused on approximate numerical solutions using non-parametric estimators that rely on state space sampling.
+Estimation with these approximate sampling-based solutions comes with increased computational burden over closed-form solutions.
+
+Bergman, in his doctoral work published in 1997, was the first to use numerical approximate solutions for recursive TRN estimation, as applied to aircraft TRN with radar altimeter measurements.
+He implemented a Point Mass Filter (PMF) for approximating the full non-linear state distribution in \cite{Bergman97bayesianinference}, and then demonstrated the utility of Particle Flter (PF) methods for TRN.
+
+A body of work has focused on the use of PMF and PF estimators in underwater TRN.
+PMF implementations of TRN have been successfully deployed on commercial AUV systems, including the Kongsberg HUGIN AUV \cite{Hagen2010} and the Saab AUV62 \cite{Carlstrom2005}.
+Williams implemented a PF for position and velocity estimation for a towed underwater vehicle \cite{Williams2006}.  
+In \cite{Karlsson2003a}, a PF was implemented to estimate a state that included orientation, angular rate, and velocity.
+Further, comparison of PMF and PF utility for TRN has been studied \cite{Anonsen2006}.
+In general, PMF solutions are more robust, while PF solutions are able to more efficiently sample the state space for a higher accuracy.
+More recently, Kim and Kim \cite{Kim2014} implemented a 9-DOF TRN state estimator (3-DOF map-relative position, 3-DOF orientation, and 3-DOF velocity) using a Rao-Blackwellised Particle Filter (RBPF) \cite{Doucet2000}, where single-beam altimeter and dead reckoning measurements were available.
+The RBPF sampled horizontal position, and then for each sample particle an EKF estimated the remaining 7 kinematic states conditioned on the horizontal position sample.
+
+\begin{figure}[!h!]
+	\centering
+		\includegraphics[width=0.8\textwidth]{Meduna2010TRN}
+	\caption{AUV navigation to a homer location using closed-loop TRN from \cite{Meduna2010}}
+	\label{fig:Meduna2010}
+\end{figure}
+
+Researchers have extended the applicability of TRN to lower-cost vehicles, and have focused on improving TRN robustness.
+Meduna and Rock demonstrated meter-level TRN accuracy for AUVs equipped with non-inertial grade navigation sensors \cite{Meduna2008}.
+Meduna et. al. demonstrated TRN using coarse maps with accuracy on the order of map resolution \cite{Meduna2009}.
+In \cite{Meduna2010}, the navigation of an AUV to a homer location in the Monterey Bay using  closed-loop TRN was demonstrated, as shown in Figure \ref{fig:Meduna2010}.
+Houts et. al. developed a robust TRN framework for failure detection and recovery though measurement innovations monitoring \cite{Houts2013}.
+Further toward TRN robustness for low-information (i.e. flat) terrain, Dektor and Rock presented a method that, through adjustment of the measurement update weighting according to the available terrain information, prevents false fixes for cases where terrain signal-to-noise (map and sensor noise) is low \cite{Dektor2012}.
+
+In addition to the success of underwater TRN using multibeam sonars and DVL beams, recursive TRN methods have been demonstrated with interferometric sidescan sonar. 
+In the work of Hagen et. al. \cite{Hagen2011}, interferometric sonar is used at low altitudes in order to increase the sensed terrain area to aid navigation, where downward-looking range sensors are limited.
+Interferometric sidescan returns provide direct measurement of topography (bathymetry) as opposed to the sensing modality of standard sidescan sonar which provides intensity versus time of flight without beam directionality (see Sections \ref{intro.Sonar}, \ref{sonar.Types.Sidescan} for further detail). 
+
+A recursive terrain-relative localization method for the correlation of sonar imagery with a prior topography map is presented in this thesis.
+As described in Section \ref{framework.PMF}, sequential sonar image measurements are used for position estimation of a moving underwater vehicle (AUV).
+The key distinction between the work in this thesis and prior TRN work is that prior works used ranging sensors (e.g. multibeam sonar or DVL).
+In fact, the work in this thesis is essentially TRN using imaging sonars instead of ranging sensors.
+However, as the term ``TRN'' in the community has been used exclusively to denote the correlation of range sensor measurements with a topography map, the term TRN will not be used in this thesis to describe the methodology.
+%For AUV use, the most common type of imaging sonar used are sidescan sonar systems, and the results of Chapter \ref{ch.AUV} demonstrate meter-level AUV localization using sidescan sonar measurements.
+%Note that the sidescan sonar measurements considered in this thesis are non-interferometric, and as such the methodology is different from that of \cite{Hagen2011}.
+
+\section{Feature-Based Navigation with Imagery}
+\label{related.Feature}
+
+Feature-based navigation has been demonstrated extensively for underwater robotic localization.
+At a high level, these methods identify distinctive features in a sequence of images and match features across images in order to provide correspondence between images.
+Specifically, correspondence allows for the pose offset between image locations to be estimated.
+As such, feature-based navigation techniques typically provide position estimation with respect to an anchor pose (e.g. the first pose in the sequence), though some work has focused on localization using image features with respect to prior mapped features in the inertial world frame. 
+%Typically, these feature-based methods extend feature technology from the computer vision field.
+
+Many of these past works are providing solutions to the Simultaneous Localization and Mapping (SLAM) problem.  
+SLAM is a field of research in robotics that has been the focus of a tremendous body of work in indoor, outdoor, airborne, space, and underwater applications.
+A comprehensive overview of SLAM methodologies is presented in \cite{Thrun2005}.
+
+The following sections provide an overview of past works in feature-based navigation when using optical imagery and sonar imagery.
+
+\subsection{Optical Imagery}
+\label{related.Feature.Optical}
+
+Optical imagery has been used extensively for localization and mapping with underwater vehicles.
+An early use of monocular optical imagery for navigation was that of Marks et. al. \cite{Marks1994},  where the 2-D horizontal offset between imaging timesteps was estimated using a signum Laplacian of Gaussian (SLoG) filter \cite{Marks1994}.
+A computationally simple xor correlator was used on the SLoG images for the visual odometry.
+A SLoG image example and a sample alignment sequence of underwater images from \cite{Marks1994} is presented in Figure \ref{fig:MarksRichmond}.
+Richmond and Rock fused the xor-SLoG image correlation method with DVL measurements in an information filter framework for real-time large-scale mosaicking in \cite{Richmond2006}.
+In \cite{Richmond2007a}, Richmond and Rock built a large-scale mosaic of the \emph{USS Macon}, a $239m$ dirigible aircraft carrier that went down off the Big Sur coast of California in 1935.
+A portion of the \emph{Macon} mosaic is shown in Figure \ref{fig:MarksRichmond}.
+
+\begin{figure}[!h!]  	
+	\centering
+	\begin{subfigure}[b]{0.2\textwidth}
+		\includegraphics[width=\textwidth]{Marks1994_Slog}
+		\caption{}
+ 	 \end{subfigure}
+  	\hspace{1ex}	
+	\centering
+	\begin{subfigure}[b]{0.29\textwidth}
+                \includegraphics[width=\textwidth]{Marks1994_Mosaic}
+                \caption{}
+  	\end{subfigure}
+  	\hspace{1ex}
+  	\centering
+	\begin{subfigure}[b]{0.44\textwidth}
+                \includegraphics[width=\textwidth]{Richmond2007a}
+                \caption{}
+  	\end{subfigure}
+
+  	\caption{Image-based navigation examples. (a) SLoG filter from \cite{Marks1994} (b) Image alignment using the xor-SLoG method from \cite{Marks1994} (c) \emph{Macon} mosaic from \cite{Richmond2007a} }
+  	\label{fig:MarksRichmond}
+\end{figure}
+
+Increased computational power and developments in the computer vision field have led to an explosion of image feature types used for image correspondence in the underwater domain.
+Image feature technology is broadly separable into keypoint detection, where a keypoint is an interesting point in an image, and descriptor encoding, where a descriptor is a vector that encodes local intensity gradient information about the keypoint.
+Prominent feature types include SIFT \cite{Lowe2004}, SURF \cite{Bay2006}, Zernike moments \cite{Khotanzad1990}, and Harris corners \cite{Harris1988}.
+
+In \cite{Eustice2005}, Eustice et. al. demonstrated visually-aided navigation around the RMS Titanic using a sparse extended information filter \cite{Thrun03d} framework for SLAM.
+Visual correspondence between monocular images was accomplished through intelligent matching of Harris and SIFT features in a vision pipeline detailed by the authors in \cite{Eustice2004}, where the Essential Matrix \cite{Longuet1981} between images is calculated for successful image matches.
+The sparse extended information filter framework allowed for consistent covariance bounds which made data association between image frames more stable, i.e. loop closure frame-to-frame correspondence was more reliable.
+
+\begin{figure}[!h!]
+	\centering
+		\includegraphics[width=0.8\textwidth]{Eustice2005}
+	\caption{Epipolar lines from feature matching in low-overlap imagery from \cite{Eustice2005}. }
+\end{figure}
+
+In \cite{Kunz2013}, Kunz and Singh fuse monocular vision and multibeam sonar measurements for accurate navigation and high-resolution mapping, using a unified pose graph formulation that solves the SLAM problem through incremental Smoothing and Mapping (iSAM) \cite{Dellaert2006}, \cite{Kaess2008}.
+
+\subsection{Sonar Imagery}
+\label{related.Feature.Sonar}
+
+Several examples of successful localization using image features applied to sidescan sonar images exist in the literature. 
+Typically, a flat seafloor assumption is employed in these methods.
+The flat seafloor assumption is employed due to the inherent ambiguity in extrapolating spatial information from sonar imagery; specifically, the azimuth and range of a given intensity return are known for sonar imagery, but the elevation angle is unknown, as overviewed in Section \ref{intro.Sonar}.  
+
+In \cite{Stalder2008} a method is proposed to detect and match landmarks in sidescan imagery by level set evolution on Haralick feature maps, where the nature of the landmark registration is similar in nature to visual feature matching. 
+In \cite{Vandrish2011}, Vandrish et. al. compared image matching results across sidescan images across using differing techniques: maximization of mutual information, a phase correlation method based on \cite{Reddy1996}, SIFT correlation \cite{Lowe2004}, and a log-polar correlation method.
+Phase-correlation and SIFT matching were found to perform best, with SIFT showing favorable execution time for real-time operation.
+Following on this work, King et al. detailed the development of a real-time sidescan image registration framework that would allow an AUV to follow a trained route \cite{King2012}.
+The approach of King et. al. is to navigate with respect to prior sidescan sonar images in a \emph{qualitative navigation} scheme \cite{Levitt1990}, where each reference sidescan sonar image is a local landmark map, and where reference sidescan sonar images are not necessarily tied to one another by geometric constraints.
+In this way, the AUV localizes itself with respect to an individual prior reference sidescan sonar image along the trained route.
+A similar qualitative topological localization scheme was demonstrated on a terrestrial robot in \cite{Zhang2009}, where the authors suggested the applicability for autonomous package delivery systems along trained routes.
+King et. al. further demonstrated the sidescan registration capability in \cite{King2013}, comparing several computer vision features types from the OpenCV computer vision library \cite{opencv_library}.
+While successful registration was accomplished for many of the sonar images, the authors in \cite{King2013} point to the difficulty in matching sonar features as compared to matching in optical imagery.
+
+In \cite{Fallon2011}, Fallon et. al. accomplish AUV localization through the fusion of sidescan sonar image registration and acoustic ranging from a surface vessel, utilizing one-way travel time ranging as detailed in \cite{Eustice2007}.
+The localization is accomplished in a pose graph formulation, and solved using iSAM \cite{Dellaert2006}.
+The authors used hand-picked sonar features in post-processing for sonar image reigstration, and also deployed known fiducials for recognition in sidescan imagery.
+They cited the difficulty in accomplishing feature recognition in sonar imagery, even with known and specially designed fiducials, as a limitation of the performance.
+
+In \cite{Fallon2013}, Fallon et. al. develop a method where forward-looking multibeam imaging sonar is used to recognize feature landmarks from a prior high-resolution sidescan sonar map.
+The localization method is intended for use with SWaP-limited low cost vehicles, where limited sensing is available (notably there is no DVL). 
+This work is notable for in that a flat seafloor assumption is not employed, but rather two multibeam imaging sonars are used, one horizontal and one vertical, in order to remove some spatial ambiguity in the measurements (and adjust the image intensities along the range returns).
+The results of the paper present accurate localization results when prior features are recognized, but a conclusion of the paper is that feature recognition is very challenging, and this presents a major limit on performance.
+
+Image registration with sonar imagery has also been used for in SLAM solutions for improved sidescan sonar mapping.  
+In \cite{Ruiz2003}, Ruiz et. al. distinctive features were identified in sidescan sonar imagery, and matched across images to estimate and track landmark positions.  
+These landmark correspondences were used to improve the navigation estimate in order to project a more smooth and consistent sidescan map. 
+In \cite{Ruiz2004}, Ruiz et. al. improved on this methodology and presented the results of sidescan image registration in an EKF SLAM framework for smoother mapping of sidescan sonar imagery.
+However, landmark/feature identification was performed by hand, again due to the difficulty in recognizing sonar imagery features across sonar images.
+
+These past works all point to a high level of difficulty in sonar image registration due to limited recognition of previously observed sonar image features.
+In \cite{Rikoski2005}, Rikoski et. al. mathematically detailed the ill-posedness of correlating sonar imagery in general, and validated his analysis with both simulated and field results.
+Rikoski et. al. show that correlation of sonar images is only well-posed when the viewing range and azimuth (bearing) to a feature is similar between the sonar images.
+Intuitively, because acoustic shadows form a dominant information source in sonar image features, it is logical that feature appearance should change considerably based on the relationship between the viewer (sonar transducer) position and the landmark.
+
+The work presented in this paper differs from these past works in that the presented method produces a navigation estimate with respect to a prior \emph{topographical} terrain map, rather than relative to previous sonar images or a prior sonar image feature map.  
+Further, this work does not require a flat bottom assumption in order to disambiguate the sonar intensity returns; expected visibility images are generated from a topography map and projected into the sonar image range-azimuth domain, \emph{which is an unambiguous mapping}.  
+In fact, the approach presented in this paper works best for interesting topography, i.e. non-flat terrain.
+In that way, this thesis work is complementary to the works overviewed in this section which are most useful for flat terrain.
+
+\section{Topography Mapping from Intensity Imagery}
+\label{related.SfS}
+
+Mapping topographical features from intensity imagery has been the focus of a large body of work across fields and application domains.
+This problem is the inverse of the the problem addressed by this thesis, where this thesis presents a method to project topographical information \emph{into} intensity (sonar) imagery.
+
+Shape from Shading (SfS) is a field of research in which reflectance information in optical imagery is used to infer geometrical features, where the first work in the field was introduced by Horn in 1970 \cite{Horn1970}.
+SfS techniques typically assume Lambertian reflection \cite{Shirley2009} with homogeneous material reflectance properties and continuous smooth surfaces.
+These assumptions suit many imaging situations, such as topographical mapping from lunar imagery and marble statues.
+SfS methods may be broadly classified as minimization \cite{Horn1989} \cite{Szeliski1991}, propagation \cite{Horn1970}, local \cite{Pentland1984}, and linear \cite{Tsai1994} approaches.
+Minimization approaches solve for shape and gradients by minimization of an appropriate energy function, propagation approaches propagate shape information from maximal intensity surface points, local approaches solve for shape based on an assumption of surface type, and linear approaches linearize the reflectance map for shape information.
+Zhang et al. provides a comprehensive survey of SfS techniques and comparison of performances \cite{Zhang1999}.
+
+In the underwater domain, shape-from-shaping methods have been used for topographical mapping from sonar imagery.
+In \cite{Langer1991}, Langer and Hebert present a propagation SfS approach that is employed for approximate surface reconstruction from sidescan sonar imagery, where surface estimation is propagated from directly beneath the sonar transducer along the scan line.
+In \cite{Dura2004}, Dura et. al. compare a linear SfS approach with sidescan sonar imagery with propagation SfS (based on \cite{Langer1991}), and found that linear SfS is more robust in the presence of noise and in processing isotropic seabeds, but is less robust to propagation SfS in processing rippled terrain.
+In \cite{Coiras2005} and \cite{Coiras2007}, an expectation-maximization algorithm is employed to estimate elevation maps from sidescan sonar imagery.
+The algorithm works iteratively by estimating the most likely shape for sonar image intensity profiles (the hidden state is the surface shape).
+
+In \cite{Woock2014}, Woock and Beyerer use kernel shape functions in order to infer topography from sidescan sonar measurements.
+Essentially, the parameters of overlapping Gaussian surface kernels are estimated to best model sidescan sonar measurements.
+The algorithm is tested in simulation, using a simulation environment described in \cite{Woock2013}, where shape reconstruction performs well on the simulated terrain profiles presented.
+However, as Woock points out, these simulated results ignore differences in surface reflectance properties, and only considers changes in sidescan sonar intensities according to surface topography.
+
+\section{Use of Shadow Information for State Estimation}
+\label{related.Shadow}
+
+The use of shadow information for state estimation is not new, particularly in the domain of visual imagery analysis. 
+The use of visual shadow information for planetary entry, descent, and landing (EDL) has received a good amount of attention. 
+In \cite{Matthies2008} shadows in visual imagery are used to identify hazards (rocks) in a landing scenario, whereby rocks detected by shadows are avoided. 
+Further, in \cite{Crane2013}, rock size and location are identified by shadow information and are then tracked in an Extended Kalman Filter (EKF) framework in order to generate accurate hazard maps for safe landing. 
+
+In a different vein of work, visual shadows are used in \cite{Lee2009} to aid the navigation of an in-pipe inspection robot, where the shape of shadow regions in the visual image inform the robot of bends in the pipe.  
+
+The work in this paper differs from the EDL works fundamentally in that those prior works seek to extract spatial mapping data from shadow information, whereas the work presented here focuses on using prior spatial data (i.e. a terrain map) in order to localize a robot.  In this regard, the work is closer in spirit to the in-pipe robotic inspection work, though the presented work is localizing to natural terrain, whereas the in-pipe work focuses on a known set of man-made geometry primitives.
+
+Mine detection/classification in sonar imagery
+
+Shape from shadow
+
+TODO: Fill this in
+
+\section{Signals of Opportunity in Radar Localization}
+\label{related.Signals}
+
+``Signals of opportunity'' refer to commonly available signals, such as broadcast television signals, that can be used for localization, despite not being designed for it.
+
+Shadow data in sonar imagery is similar in nature, as imaging sonars were not designed to be correlated with topography, but acoustic shadows in the sonar data present a ``signal of opportunity''.
+
+TODO: Fill this in
+
